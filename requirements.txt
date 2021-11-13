@@ -1,0 +1,4 @@
+# huggingface
+transformers==4.11.0
+tokenizers==0.10.3
+datasets
