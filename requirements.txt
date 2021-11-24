@@ -1,5 +1,6 @@
-# huggingface
+torch==1.10.0
 transformers==4.11.0
 tokenizers==0.10.3
 datasets
 tqdm
+sentencepiece==0.1.96
