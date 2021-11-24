@@ -2,11 +2,12 @@ import argparse
 import concurrent.futures
 import os
 import random
-import time
 
 import datasets
 import torch
 import transformers
+
+import utils
 
 # Number of parameters in the original pretrained BERT architecture.
 BERT_N_PARAMS = 109483778
@@ -26,37 +27,6 @@ def parse_args():
     ap.add_argument("--limit", type=int, default=-1)
 
     return ap.parse_args()
-
-
-@torch.no_grad()
-def compute_acc(model, dataloader, device):
-    accs = []
-    for input_ids, attention_mask, labels in dataloader:
-        input_ids = input_ids.to(device)
-        attention_mask = attention_mask.to(device)
-        labels = labels.to(device)
-
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-        logits = outputs.logits
-
-        accs.append((logits.argmax(axis=-1) == labels).float().mean())
-    return sum(accs) / len(accs)
-
-
-def create_dataloader(dataset, tokenizer, batch_size):
-    # This code is for the MNLI dataset.
-    # encodings = tokenizer(
-    #     [example["premise"] for example in dataset], [example["hypothesis"] for example in dataset],
-    #      max_length=128, add_special_tokens=True, padding=True, truncation=True,
-    #     return_tensors='pt')
-
-    encodings = tokenizer([example['sentence'] for example in dataset],
-         max_length=128, add_special_tokens=True, padding=True, truncation=True,
-        return_tensors='pt')
-    labels = torch.tensor([example["label"] for example in dataset])
-    return torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(encodings["input_ids"], encodings["attention_mask"], labels),
-        batch_size=batch_size)
 
 
 def train_wrapper(kwargs):
@@ -102,8 +72,8 @@ def train(
                 print(f"{prefix} [Epoch {epoch}] Step {i + 1} of {len(train_dataloader)}: "
                       f"loss = {loss.item()}")
 
-        metrics["train_acc"] = compute_acc(model, train_dataloader, device=device)
-        metrics["val_acc"] = compute_acc(model, val_dataloader, device=device)
+        metrics["train_acc"] = utils.compute_acc(model, train_dataloader, device=device)
+        metrics["val_acc"] = utils.compute_acc(model, val_dataloader, device=device)
         print(f"{prefix} Train accuracy: {metrics['train_acc']}")
         print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
 
@@ -142,11 +112,13 @@ def main(args):
     random.shuffle(train_ds)
     partition_size = len(train_ds) // args.num_models + 1
     train_dataloaders = [
-        create_dataloader(train_ds[i : i + partition_size], tokenizer, args.batch_size)
+        utils.create_dataloader(
+            train_ds[i : i + partition_size], tokenizer, args.batch_size, args.dataset)
         for i in range(0, len(train_ds), partition_size)
     ]
     print(f"Partitioned {len(train_ds)} total training samples")
-    val_dataloader = create_dataloader(ds['validation'], tokenizer, args.val_batch_size)
+    val_dataloader = utils.create_dataloader(
+        ds['validation'], tokenizer, args.val_batch_size, args.dataset)
 
     # Build models.
     print("Building models")
