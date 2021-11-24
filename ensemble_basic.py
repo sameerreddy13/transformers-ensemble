@@ -131,7 +131,7 @@ def main(args):
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = transformers.AlbertTokenizer.from_pretrained('albert-base-v2')
-    ds = datasets.load_dataset("glue", args.dataset)
+    ds = datasets.load_dataset("glue", args.dataset) #TODO: Check if this needs to be set as "sst2"
 
     train_ds = list(ds["train"])[:args.limit]
     random.shuffle(train_ds)
