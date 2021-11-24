@@ -5,6 +5,10 @@ Glenn Matlin (GT ID: X) , Piyush Patil (GT ID: Y), Sameer Reddy (GT ID: Z)
 Requires Python 3.8.0 or later with Linux or MacOS
 
 ## Setup Virtual Envrionement
+
+Option 1) Run `bash setup.sh` to setup virtual environment
+
+Option 2) Execute the following commands:
 ```
 python3 -m venv ~/repo_team1/venv/
 source ~/repo_team1/venv/bin/activate
