@@ -218,5 +218,10 @@ def main(args):
         pool = torch.multiprocessing.Pool(len(jobs))
         metrics = pool.map(train_wrapper, jobs)
 
+    metrics_save_path = os.path.join(args.save_dir, "all_metrics.pkl")
+    with open(metrics_save_path, "wb") as f:
+        pickle.dump(metrics_save_path, f)
+    print(f"Done. Saved all metrics to: {metrics_save_path}")
+
 if __name__ == "__main__":
     main(parse_args())
