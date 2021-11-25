@@ -194,14 +194,14 @@ def main(args):
 
     # Build models.
     print("Building models")
-    config = transformers.AlbertConfig(
-        embedding_size=128,
+    config = transformers.BertConfig(
         # TODO(piyush) Don't hard-code (this is for 8 models).
-        hidden_size=int(4096 * 7/32),
-        intermediate_size=int(16384 * 3/16),
+        # num_hidden_layers=
+        # num_attention_heads=
+        intermediate_size=int(3072 * 3/16),
     )
     models = [
-        transformers.AlbertForSequenceClassification(config)
+        transformers.BertForSequenceClassification(config)
         for _ in range(args.num_models)
     ]
 
