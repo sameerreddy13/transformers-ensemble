@@ -24,6 +24,7 @@ def parse_args():
     ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--distillation-dataset", type=str, default=None)
+    ap.add_argument("--extract-subnetwork", action="store_true", default=False)
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--val-batch-size", type=int, default=32)
@@ -196,16 +197,24 @@ def main(args):
 
     # Build models.
     print("Building models")
-    config = transformers.BertConfig(
-        # TODO(piyush) Don't hard-code (this is for 8 models).
-        # num_hidden_layers=
-        # num_attention_heads=
-        intermediate_size=int(3072 * 3/16),
-    )
-    models = [
-        transformers.BertForSequenceClassification(config)
-        for _ in range(args.num_models)
-    ]
+    if args.extract_subnetwork:
+        print("Extracting subnetworks from pretrained BERT")
+        models = [
+            utils.extract_subnetwork_from_bert(
+                # TODO(piyush) Select automatically based on --num-models
+                num_hidden_layers=6, num_attention_heads=6, intermediate_size=3072 // 2)
+            for _ in range(args.num_models)
+        ]
+    else:
+        config = transformers.BertConfig(
+            # TODO(piyush) Don't hard-code (this is for 8 models).
+            num_hidden_layers=3,
+            intermediate_size=int(3072 * 4/16),
+        )
+        models = [
+            transformers.BertForSequenceClassification(config)
+            for _ in range(args.num_models)
+        ]
 
     # Preserve the same total parameter count as original BERT, within a 10% margin
     # (excluding embedding layers).
@@ -216,8 +225,11 @@ def main(args):
             param_name not in name
             for param_name in ("word_embeddings", "position_embeddings", "token_type_embeddings"))
     ])
-    print(f"Created {args.num_models} models, each with {n_params / 1e6} million parameters")
-    # assert 1 / 1.1 <= (args.num_models * n_params) / BERT_N_PARAMS_NO_EMB <= 1.1 # TODO(piyush) uncomment
+    param_ratio = n_params / BERT_N_PARAMS_NO_EMB
+    print(f"Created {args.num_models} models, each with {n_params / 1e6} million parameters "
+          f"({param_ratio * 100}%) (not counting embedding layers)")
+    if not (1 / 1.1 <= args.num_models * param_ratio <= 1.1):
+        print("WARNING: Total number of parameters isn't within 10% of BERT")
 
     # Train.
     jobs = [
