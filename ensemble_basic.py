@@ -54,7 +54,7 @@ def train(
     print(f"{prefix} Moved model to device {device}")
 
     metrics = {}
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, eps=1e-8)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     for epoch in range(num_epochs):
         for i, (input_ids, attention_mask, labels) in enumerate(train_dataloader):
             input_ids = input_ids.to(device, non_blocking=True)
