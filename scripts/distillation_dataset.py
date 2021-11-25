@@ -64,13 +64,12 @@ def main():
         if ARGS.dataset == "sst2":
             encodings[key] = tokenizer(
                 [example['sentence'] for example in ds[key]], max_length=128,
-                add_special_tokens=True, padding=True, truncation=True, return_tensors='pt')
+                add_special_tokens=True, padding="max_length", return_tensors='pt')
         elif ARGS.dataset == "mnli":
             encodings[key] = tokenizer(
                 [example["premise"] for example in ds[key]],
                 [example["hypothesis"] for example in ds[key]],
-                max_length=128, add_special_tokens=True, padding=True, truncation=True,
-                return_tensors='pt')
+                max_length=128, add_special_tokens=True, padding="max_length", return_tensors='pt')
         else:
             raise ValueError(f"Unknown dataset {name}")
 

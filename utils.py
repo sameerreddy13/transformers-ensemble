@@ -20,13 +20,12 @@ def create_dataloader(dataset, tokenizer, batch_size, name):
     if name == "sst2":
         encodings = tokenizer(
             [example['sentence'] for example in dataset], max_length=128, add_special_tokens=True,
-            padding=True, truncation=True, return_tensors='pt')
+            padding="max_length", return_tensors='pt')
     elif name == "mnli":
         encodings = tokenizer(
             [example["premise"] for example in dataset],
             [example["hypothesis"] for example in dataset],
-            max_length=128, add_special_tokens=True, padding=True, truncation=True,
-            return_tensors='pt')
+            max_length=128, add_special_tokens=True, padding="max_length", return_tensors='pt')
     else:
         raise ValueError(f"Unknown dataset {name}")
 
