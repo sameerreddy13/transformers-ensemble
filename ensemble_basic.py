@@ -1,6 +1,7 @@
 import argparse
 import concurrent.futures
 import os
+import pickle
 import random
 
 import datasets
@@ -21,6 +22,7 @@ def parse_args():
     ap.add_argument("--seq-per-gpu", action="store_true", default=False)
     ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
+    ap.add_argument("--distillation-dataset", type=str, default=None)
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--val-batch-size", type=int, default=32)
@@ -37,19 +39,27 @@ def train_one_epoch(
     optimizer,
     device,
     save_path,
+    distillation=False,
     print_freq=50,
     prefix="",
 ):
     model = model.train()
     metrics = {}
     train_losses = {}
-    for i, (input_ids, attention_mask, labels) in enumerate(train_dataloader):
-        input_ids = input_ids.to(device, non_blocking=True)
-        attention_mask = attention_mask.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
+    for i, example in enumerate(train_dataloader):
+        input_ids = example[0].to(device, non_blocking=True)
+        attention_mask = example[1].to(device, non_blocking=True)
+        labels = example[2].to(device, non_blocking=True)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
+                        output_hidden_states=True)
         loss = outputs.loss
+
+        if distillation:
+            bert_last_hidden_state = example[3].to(device, non_blocking=True)
+            distill_loss = utils.distillation_loss(
+                outputs["hidden_states"][-1], bert_last_hidden_state, mask=attention_mask)
+            loss = loss + distill_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -92,6 +102,7 @@ def train(
     device,
     save_dir,
     lr=1e-5,
+    distillation=False,
     num_epochs=100,
     print_freq=50,
 ):
@@ -108,7 +119,7 @@ def train(
         epoch_metrics = train_one_epoch(
             model, train_dataloader, val_dataloader, optimizer, device,
             save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"), print_freq=print_freq,
-            prefix=f"{prefix} [Epoch {epoch}]")
+            distillation=distillation, prefix=f"{prefix} [Epoch {epoch}]")
         metrics[epoch] = epoch_metrics
 
     return metrics
@@ -140,7 +151,7 @@ def train_share_gpu(jobs):
             epoch_metrics = train_one_epoch(
                 model, job["train_dataloader"], job["val_dataloader"], optimizers[i], device,
                 save_path=os.path.join(job["save_dir"], f"model_epoch{epoch}.pt"),
-                prefix=f"{job_prefix} [Epoch {epoch}]")
+                distillation=job["distillation"], prefix=f"{job_prefix} [Epoch {epoch}]")
             metrics[i][epoch] = epoch_metrics
 
     return metrics
@@ -160,15 +171,21 @@ def main(args):
     print(f"Building dataloaders for dataset: {args.dataset}")
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    tokenizer = transformers.AlbertTokenizer.from_pretrained('albert-base-v2')
-    ds = datasets.load_dataset("glue", args.dataset)
+    tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
+    if args.distillation_dataset is not None:
+        with open(args.distillation_dataset, "rb") as f:
+            ds = pickle.load(f)
+        print(f"Loaded distillation dataset from {args.distillation_dataset}")
+    else:
+        ds = datasets.load_dataset("glue", args.dataset)
 
     train_ds = list(ds["train"])[:args.limit]
     random.shuffle(train_ds)
     partition_size = len(train_ds) // args.num_models + 1
     train_dataloaders = [
         utils.create_dataloader(
-            train_ds[i : i + partition_size], tokenizer, args.batch_size, args.dataset)
+            train_ds[i : i + partition_size], tokenizer, args.batch_size, args.dataset,
+            distillation=args.distillation_dataset is not None)
         for i in range(0, len(train_ds), partition_size)
     ]
     print(f"Partitioned {len(train_ds)} total training samples")
@@ -204,6 +221,7 @@ def main(args):
             "lr": args.lr,
             "num_epochs": args.num_epochs,
             "save_dir": os.path.join(args.save_dir, str(i)),
+            "distillation": args.distillation_dataset is not None,
         }
         for i in range(args.num_models)
     ]
