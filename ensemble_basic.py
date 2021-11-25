@@ -56,6 +56,7 @@ def create_dataloader(dataset, tokenizer, batch_size):
     return torch.utils.data.DataLoader(
         torch.utils.data.TensorDataset(encodings["input_ids"], encodings["attention_mask"], labels),
         batch_size=batch_size)
+
 def train(
     task_id,
     model,
@@ -113,6 +114,29 @@ def train(
 
     return metrics
 
+# Pseudocode
+"""
+KD_loss = nn.KLDivLoss(reduction='batchmean')
+
+def kd_step(teacher: nn.Module,
+            student: nn.Module,
+            temperature: float,
+            inputs: torch.tensor,
+            optimizer: Optimizer):
+    teacher.eval()
+    student.train()
+    
+    with torch.no_grad():
+        logits_t = teacher(inputs=inputs)
+    logits_s = student(inputs=inputs)
+    
+    loss = KD_loss(input=F.log_softmax(logits_s/temperature, dim=-1),
+                   target=F.softmax(logits_t/temperature, dim=-1))
+    
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+"""
 
 def train_distil(
     task_id,
@@ -126,6 +150,25 @@ def train_distil(
     num_epochs=100,
     print_freq=50,
 ):
+    """
+    Incorporate distillation
+    In each training step instead of training models w/ true labels
+    train w/ soft labels from the pairing model
+    Use the pre-train BERT, apply the model to inputs, get logits
+    fit the small ensemble models to logits from the pre-trained model
+    Use 'average ensembling' when doing evaluations (average the predictions together to get the final prediction)
+    :param task_id:
+    :param student_model:
+    :param teacher_model:
+    :param train_dataloader:
+    :param val_dataloader:
+    :param device:
+    :param save_dir:
+    :param lr:
+    :param num_epochs:
+    :param print_freq:
+    :return:
+    """
     prefix = f"[Thread {task_id}]"
     os.makedirs(save_dir, exist_ok=True)
     print(f"{prefix} Created {save_dir}")
@@ -138,14 +181,14 @@ def train_distil(
     metrics = {}
     optimizer = torch.optim.AdamW(student_model.parameters(), lr=lr, eps=1e-8)
 
-    """
-    Incorporate distillation
-    In each training step instead of training models w/ true labels
-    train w/ soft labels from the pairing model
-    Use the pre-train BERT, apply the model to inputs, get logits
-    fit the small ensemble models to logits from the pre-trained model
-    Use 'average ensembling' when doing evaluations (average the predictions together to get the final prediction)
-    """
+
+# --------------------------------------------------------------------------------
+    teacher_model.eval()
+    with torch.no_grad():
+        for input_ids, attention_mask, labels in train_dataloader:
+            logits_t = teacher_model(inputs=input_ids)
+    logits_s = student_model(inputs=input_ids)
+# --------------------------------------------------------------------------------
 
     for epoch in range(num_epochs):
         tepoch = tqdm(train_dataloader, unit="batch")
