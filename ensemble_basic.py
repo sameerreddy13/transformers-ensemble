@@ -56,6 +56,7 @@ def train(
     metrics = {}
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     for epoch in range(num_epochs):
+        train_losses = {}
         for i, (input_ids, attention_mask, labels) in enumerate(train_dataloader):
             input_ids = input_ids.to(device, non_blocking=True)
             attention_mask = attention_mask.to(device, non_blocking=True)
@@ -71,6 +72,7 @@ def train(
             if i % print_freq == 0:
                 print(f"{prefix} [Epoch {epoch}] Step {i + 1} of {len(train_dataloader)}: "
                       f"loss = {loss.item()}")
+                train_losses[i] = loss.item()
 
         metrics["train_acc"] = utils.compute_acc(model, train_dataloader, device=device)
         metrics["val_acc"] = utils.compute_acc(model, val_dataloader, device=device)
@@ -84,7 +86,8 @@ def train(
             "optimizer_state_dict": optimizer.state_dict(),
             "loss": loss.item(),
             "train_acc": metrics["train_acc"],
-            "val_acc": metrics["val_acc"]
+            "val_acc": metrics["val_acc"],
+            "train_losses": train_losses,
         }, save_path)
         print(f"{prefix} Saved model checkpoint to {save_path}")
 
