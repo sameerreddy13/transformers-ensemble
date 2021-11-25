@@ -18,6 +18,7 @@ def parse_args():
 
     ap.add_argument("--save-dir", type=str, default="checkpoints")
     ap.add_argument("--gpus", nargs="+", default=list(range(8)))
+    ap.add_argument("--seq-per-gpu", action="store_true", default=False)
     ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--num-epochs", type=int, default=100)
@@ -27,6 +28,54 @@ def parse_args():
     ap.add_argument("--limit", type=int, default=-1)
 
     return ap.parse_args()
+
+
+def train_one_epoch(
+    model,
+    train_dataloader,
+    val_dataloader,
+    optimizer,
+    device,
+    save_path,
+    print_freq=50,
+    prefix="",
+):
+    model = model.train()
+    metrics = {}
+    train_losses = {}
+    for i, (input_ids, attention_mask, labels) in enumerate(train_dataloader):
+        input_ids = input_ids.to(device, non_blocking=True)
+        attention_mask = attention_mask.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
+
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        loss = outputs.loss
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        if i % print_freq == 0:
+            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: "
+                  f"loss = {loss.item()}")
+            train_losses[i] = loss.item()
+
+    model = model.eval()
+    metrics = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "loss": loss.item(),
+        "train_acc": utils.compute_acc(model, train_dataloader, device=device),
+        "val_acc": utils.compute_acc(model, val_dataloader, device=device),
+        "train_losses": train_losses,
+    }
+    print(f"{prefix} Train accuracy: {metrics['train_acc']}")
+    print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
+
+    torch.save(metrics, save_path)
+    print(f"{prefix} Saved model checkpoint to {save_path}")
+
+    return metrics
 
 
 def train_wrapper(kwargs):
@@ -46,7 +95,7 @@ def train(
     num_epochs=100,
     print_freq=50,
 ):
-    prefix = f"[Thread {task_id}]"
+    prefix = f"[Process {task_id}]"
     os.makedirs(save_dir, exist_ok=True)
     print(f"{prefix} Created {save_dir}")
 
@@ -56,40 +105,43 @@ def train(
     metrics = {}
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     for epoch in range(num_epochs):
-        train_losses = {}
-        for i, (input_ids, attention_mask, labels) in enumerate(train_dataloader):
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
+        epoch_metrics = train_one_epoch(
+            model, train_dataloader, val_dataloader, optimizer, device,
+            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"), print_freq=print_freq,
+            prefix=f"{prefix} [Epoch {epoch}]")
+        metrics[epoch] = epoch_metrics
 
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+    return metrics
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
-            if i % print_freq == 0:
-                print(f"{prefix} [Epoch {epoch}] Step {i + 1} of {len(train_dataloader)}: "
-                      f"loss = {loss.item()}")
-                train_losses[i] = loss.item()
+def train_share_gpu(jobs):
+    prefix = f"[Process {jobs[0]['task_id']}]"
 
-        metrics["train_acc"] = utils.compute_acc(model, train_dataloader, device=device)
-        metrics["val_acc"] = utils.compute_acc(model, val_dataloader, device=device)
-        print(f"{prefix} Train accuracy: {metrics['train_acc']}")
-        print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
+    for job in jobs:
+        os.makedirs(job["save_dir"], exist_ok=True)
+        print(f"{prefix} Created {job['save_dir']}")
 
-        save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
-        torch.save({
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss.item(),
-            "train_acc": metrics["train_acc"],
-            "val_acc": metrics["val_acc"],
-            "train_losses": train_losses,
-        }, save_path)
-        print(f"{prefix} Saved model checkpoint to {save_path}")
+    device = jobs[0]["device"]
+    num_epochs = jobs[0]["num_epochs"]
+    optimizers = [
+        torch.optim.SGD(job["model"].parameters(), lr=job["lr"], momentum=0.9)
+        for job in jobs
+    ]
+
+    metrics = [{} for _ in range(len(jobs))]
+    for epoch in range(num_epochs):
+        for i, job in enumerate(jobs):
+            job_prefix = f"{prefix} [Model {i}]"
+            print(f"{job_prefix} Starting training for epoch {epoch}")
+
+            model = job["model"].to(device, non_blocking=True)
+            print(f"{job_prefix} Moved model to device {device}")
+
+            epoch_metrics = train_one_epoch(
+                model, job["train_dataloader"], job["val_dataloader"], optimizers[i], device,
+                save_path=os.path.join(job["save_dir"], f"model_epoch{epoch}.pt"),
+                prefix=f"{job_prefix} [Epoch {epoch}]")
+            metrics[i][epoch] = epoch_metrics
 
     return metrics
 
@@ -142,8 +194,7 @@ def main(args):
     # assert 1 / 1.1 <= (args.num_models * n_params) / BERT_N_PARAMS <= 1.1 # TODO(piyush) uncomment
 
     # Train.
-    pool = torch.multiprocessing.Pool(args.num_models)
-    metrics = pool.map(train_wrapper, [
+    jobs = [
         {
             "task_id": i,
             "model": models[i],
@@ -155,7 +206,17 @@ def main(args):
             "save_dir": os.path.join(args.save_dir, str(i)),
         }
         for i in range(args.num_models)
-    ])
+    ]
+    if args.seq_per_gpu:
+        # Collect jobs by GPU.
+        jobs_per_gpu = {gpu: [] for gpu in gpus}
+        for job in jobs:
+            jobs_per_gpu[job["device"]].append(job)
+        pool = torch.multiprocessing.Pool(len(jobs_per_gpu))
+        metrics = pool.map(train_share_gpu, jobs_per_gpu.values())
+    else:
+        pool = torch.multiprocessing.Pool(len(jobs))
+        metrics = pool.map(train_wrapper, jobs)
 
 if __name__ == "__main__":
     main(parse_args())
