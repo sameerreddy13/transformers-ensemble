@@ -225,7 +225,9 @@ def main(args):
         }
         for i in range(args.num_models)
     ]
-    if args.seq_per_gpu:
+    if args.num_models == 1:
+        metrics = train(**jobs[0])
+    elif args.seq_per_gpu:
         # Collect jobs by GPU.
         jobs_per_gpu = {gpu: [] for gpu in gpus}
         for job in jobs:
