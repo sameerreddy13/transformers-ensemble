@@ -18,12 +18,12 @@ def parse_args():
 
     ap.add_argument("--save-dir", type=str, default="checkpoints")
     ap.add_argument("--gpus", nargs="+", default=list(range(8)))
-    ap.add_argument("--num-models", type=int, default=10)
+    ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--val-batch-size", type=int, default=32)
-    ap.add_argument("--lr", type=float, default=1e-5)
+    ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--limit", type=int, default=-1)
 
     return ap.parse_args()
