@@ -12,6 +12,7 @@ import utils
 
 # Number of parameters in the original pretrained BERT architecture.
 BERT_N_PARAMS = 109483778
+BERT_N_PARAMS_NO_EMB = 85648130
 
 
 def parse_args():
@@ -88,6 +89,7 @@ def train_one_epoch(
     return metrics
 
 
+# TODO(piyush) Turn this into a decorator and put in utils.py
 def train_wrapper(kwargs):
     """
     A useful wrapper to use when parallelizing the train() function.
@@ -205,10 +207,17 @@ def main(args):
         for _ in range(args.num_models)
     ]
 
-    # Preserve the same total parameter count as original BERT, within a 10% margin.
-    n_params = sum([param.numel() for param in models[0].parameters()])
+    # Preserve the same total parameter count as original BERT, within a 10% margin
+    # (excluding embedding layers).
+    n_params = sum([
+        param.numel()
+        for name, param in models[0].named_parameters()
+        if all(
+            param_name not in name
+            for param_name in ("word_embeddings", "position_embeddings", "token_type_embeddings"))
+    ])
     print(f"Created {args.num_models} models, each with {n_params / 1e6} million parameters")
-    # assert 1 / 1.1 <= (args.num_models * n_params) / BERT_N_PARAMS <= 1.1 # TODO(piyush) uncomment
+    # assert 1 / 1.1 <= (args.num_models * n_params) / BERT_N_PARAMS_NO_EMB <= 1.1 # TODO(piyush) uncomment
 
     # Train.
     jobs = [
