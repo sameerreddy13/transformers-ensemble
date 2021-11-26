@@ -57,6 +57,7 @@ def create_dataloader(dataset, tokenizer, batch_size):
         torch.utils.data.TensorDataset(encodings["input_ids"], encodings["attention_mask"], labels),
         batch_size=batch_size)
 
+
 def train(
     task_id,
     model,
@@ -77,7 +78,6 @@ def train(
 
     metrics = {}
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, eps=1e-8)
-
     for epoch in range(num_epochs):
         tepoch = tqdm(train_dataloader, unit="batch")
         for i, (input_ids, attention_mask, labels) in enumerate(tepoch):
@@ -114,118 +114,6 @@ def train(
 
     return metrics
 
-# Pseudocode
-"""
-KD_loss = nn.KLDivLoss(reduction='batchmean')
-
-def kd_step(teacher: nn.Module,
-            student: nn.Module,
-            temperature: float,
-            inputs: torch.tensor,
-            optimizer: Optimizer):
-    teacher.eval()
-    student.train()
-    
-    with torch.no_grad():
-        logits_t = teacher(inputs=inputs)
-    logits_s = student(inputs=inputs)
-    
-    loss = KD_loss(input=F.log_softmax(logits_s/temperature, dim=-1),
-                   target=F.softmax(logits_t/temperature, dim=-1))
-    
-    loss.backward()
-    optimizer.step()
-    optimizer.zero_grad()
-"""
-
-def train_distil(
-    task_id,
-    student_model,
-    teacher_model,
-    train_dataloader,
-    val_dataloader,
-    device,
-    save_dir,
-    lr=1e-5,
-    num_epochs=100,
-    print_freq=50,
-):
-    """
-    Incorporate distillation
-    In each training step instead of training models w/ true labels
-    train w/ soft labels from the pairing model
-    Use the pre-train BERT, apply the model to inputs, get logits
-    fit the small ensemble models to logits from the pre-trained model
-    Use 'average ensembling' when doing evaluations (average the predictions together to get the final prediction)
-    :param task_id:
-    :param student_model:
-    :param teacher_model:
-    :param train_dataloader:
-    :param val_dataloader:
-    :param device:
-    :param save_dir:
-    :param lr:
-    :param num_epochs:
-    :param print_freq:
-    :return:
-    """
-    prefix = f"[Thread {task_id}]"
-    os.makedirs(save_dir, exist_ok=True)
-    print(f"{prefix} Created {save_dir}")
-
-    student_model = student_model.to(device, non_blocking=True)
-    teacher_model = teacher_model.to(device, non_blocking=True)
-
-    print(f"{prefix} Moved model to device {device}")
-
-    metrics = {}
-    optimizer = torch.optim.AdamW(student_model.parameters(), lr=lr, eps=1e-8)
-
-
-# --------------------------------------------------------------------------------
-    teacher_model.eval()
-    with torch.no_grad():
-        for input_ids, attention_mask, labels in train_dataloader:
-            logits_t = teacher_model(inputs=input_ids)
-    logits_s = student_model(inputs=input_ids)
-# --------------------------------------------------------------------------------
-
-    for epoch in range(num_epochs):
-        tepoch = tqdm(train_dataloader, unit="batch")
-        for i, (input_ids, attention_mask, labels) in enumerate(tepoch):
-            input_ids = input_ids.to(device, non_blocking=True)
-            attention_mask = attention_mask.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-
-            outputs = student_model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            if i % print_freq == 0:
-                print(f"{prefix} [Epoch {epoch}] Step {i + 1} of {len(train_dataloader)}: "
-                      f"loss = {loss.item()}")
-
-        metrics["train_acc"] = compute_acc(student_model, train_dataloader, device=device)
-        metrics["val_acc"] = compute_acc(student_model, val_dataloader, device=device)
-        print(f"{prefix} Train accuracy: {metrics['train_acc']}")
-        print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
-
-        save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
-        torch.save({
-            "epoch": epoch,
-            "model_state_dict": student_model.state_dict(),
-            "optimizer_state_dict": optimizer.state_dict(),
-            "loss": loss.item(),
-            "train_acc": metrics["train_acc"],
-            "val_acc": metrics["val_acc"]
-        }, save_path)
-        print(f"{prefix} Saved model checkpoint to {save_path}")
-
-    return metrics
-
 
 def main(args):
     save_dir = f"{args.save_dir}_{int(time.time())}"
@@ -242,8 +130,8 @@ def main(args):
     print("Building dataloaders")
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    tokenizer = transformers.BertTokenizer.from_pretrained('bert-base-uncased')
-    ds = datasets.load_dataset("glue", args.dataset) #TODO: Check if this needs to be set as "sst2"
+    tokenizer = transformers.AlbertTokenizer.from_pretrained('albert-base-v2')
+    ds = datasets.load_dataset("glue", args.dataset)
 
     train_ds = list(ds["train"])[:args.limit]
     random.shuffle(train_ds)
@@ -256,7 +144,7 @@ def main(args):
     val_dataloader = create_dataloader(ds['validation'], tokenizer, args.val_batch_size)
     # Build models.
     print("Building models")
-    config = transformers.BertConfig(
+    config = transformers.AlbertConfig(
         embedding_size=128,          # 128
         # hidden_size=int(4096 * 3/16),
         hidden_size=int(4096 * 7/32), # TODO(piyush) remove (for 8 models)
@@ -264,50 +152,50 @@ def main(args):
         initializer_range=0.05
     )
     models = [
-        transformers.BertForSequenceClassification(config)
+        transformers.AlbertForSequenceClassification(config)
         for _ in range(args.num_models)
     ]
     # Preserve the same total parameter count as original BERT, within a 10% margin.
     n_params = sum([param.numel() for param in models[0].parameters()])
     print(f"Created {args.num_models} models, each with {n_params / 1e6} million parameters")
     # assert 1 / 1.1 <= (args.num_models * n_params) / BERT_N_PARAMS <= 1.1
-    model = transformers.BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model = transformers.AlbertForSequenceClassification.from_pretrained('albert-base-v2')
     results = train(
                     task_id=0, model=model, 
                     train_dataloader=train_dataloaders[0], val_dataloader=val_dataloader, 
                     device=gpus[0], lr=args.lr, num_epochs=args.num_epochs, save_dir=os.path.join(save_dir, str(0))
                 )
     print(f"Results for model {i}:", results)
-
-    # Train the Ensemble Models
-    print("Launching training jobs")
-    for i, model in enumerate(models):
-        results = train(
-                task_id=i, model=model,
-                train_dataloader=train_dataloaders[i], val_dataloader=val_dataloader,
-                device=gpus[i], lr=args.lr, num_epochs=args.num_epochs, save_dir=os.path.join(save_dir, str(i))
-            )
-        print(f"Results for model {i}:", results)
-        break
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        futures = [
-            executor.submit(
-                train,
-                task_id=i,
-                model=models[i],
-                train_dataloader=train_dataloaders[i],
-                val_dataloader=val_dataloader,
-                device=gpus[i % len(gpus)],
-                lr=args.lr,
-                num_epochs=args.num_epochs,
-                save_dir=os.path.join(save_dir, str(i)),
-            )
-            for i in range(args.num_models)
-        ]
-        metrics = [
-            future.result()
-            for future in concurrent.futures.as_completed(futures)
-        ]
+    # Train.
+    # print("Launching training jobs")
+    # for i, model in enumerate(models):
+    #     results = train(
+    #             task_id=i, model=model, 
+    #             train_dataloader=train_dataloaders[i], val_dataloader=val_dataloader, 
+    #             device=gpus[i], lr=args.lr, num_epochs=args.num_epochs, save_dir=os.path.join(save_dir, str(i))
+    #         )
+    #     print(f"Results for model {i}:", results)
+    #     break
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     futures = [
+    #         executor.submit(
+    #             train,
+    #             task_id=i,
+    #             model=models[i],
+    #             train_dataloader=train_dataloaders[i],
+    #             valmatched_dataloader=valmatched_dataloader,
+    #             valmismatched_dataloader=valmismatched_dataloader,
+    #             device=gpus[i % len(gpus)],
+    #             lr=args.lr,
+    #             num_epochs=args.num_epochs,
+    #             save_dir=os.path.join(save_dir, str(i)),
+    #         )
+    #         for i in range(args.num_models)
+    #     ]
+    #     metrics = [
+    #         future.result()
+    #         for future in concurrent.futures.as_completed(futures)
+    #     ]
 
     print("ALL DONE")
 
