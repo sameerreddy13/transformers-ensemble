@@ -174,7 +174,7 @@ def main(args):
     print(f"Building dataloaders for dataset: {args.dataset}")
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
+    tokenizer = transformers.AutoTokenizer.from_pretrained("textattack/bert-base-uncased-SST-2")
     if args.distillation_dataset is not None:
         with open(args.distillation_dataset, "rb") as f:
             ds = pickle.load(f)

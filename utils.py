@@ -95,7 +95,7 @@ def extract_subnetwork_from_bert(
         dropout
         classifier: Linear(hidden_size, num_labels)
     """
-    model = transformers.BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model = transformers.AutoModelForSequenceClassification.from_pretrained("textattack/bert-base-uncased-SST-2")
     bert = model.bert
 
     # Randomly select layers.
