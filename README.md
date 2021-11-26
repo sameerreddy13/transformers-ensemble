@@ -15,8 +15,11 @@ Requires Miniconda 3.9.5
 
 or
 
-conda install -c huggingface transformers==4.11.0 datasets 
-conda install -c pytorchpytorch torchvision torchaudio cudatoolkit=11.3
+#conda install -c huggingface transformers==4.11.0 datasets 
+
+
+conda install -c conda-forge transformers datasets
+conda install -c pytorch pytorch torchvision torchaudio cudatoolkit=11.3
 conda install -c conda-forge sentencepiece
 ```
 
