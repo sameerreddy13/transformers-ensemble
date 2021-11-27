@@ -3,6 +3,7 @@ import concurrent.futures
 import os
 import pickle
 import random
+from pathlib import Path
 
 import datasets
 import nlpaug.augmenter.word as naw
@@ -13,10 +14,10 @@ from tqdm import tqdm
 from utils import create_encodings, create_tensor_dataset
 
 
-# python3 -m data_augmentation --language fr --gpu 1 --limit 50
-# python3 -m data_augmentation --language es --gpu 2
-# python3 -m data_augmentation --language de --gpu 3
-# python3 -m data_augmentation --language it --gpu 4
+# python3 -m data_augmentation --language fr --gpu cuda:1 --limit 50
+# python3 -m data_augmentation --language es --gpu cuda:2
+# python3 -m data_augmentation --language de --gpu cuda:3
+# python3 -m data_augmentation --language it --gpu cuda:4
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
@@ -77,8 +78,9 @@ def main(args):
     tensors_ds = create_tensor_dataset(
         dataset=train_ds, encodings=encodings, distillation=False
     )
-
-    output_path = f"{args.save_dir}/{args.dataset}_{args.language}.pt"
+    # Save the tensor dataset
+    Path(args.save_dir).mkdir(parents=True, exist_ok=True)
+    output_path = Path(f"{args.save_dir}/{args.dataset}_{args.language}.pt")
     torch.save(obj=tensors_ds, f=output_path)
     print(f"Saved tensor dataset to {output_path}")
 
