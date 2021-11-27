@@ -14,6 +14,10 @@ from utils import create_encodings, create_tensor_dataset
 
 
 # python3 -m data_augmentation --limit 10
+# python3 -m data_augmentation --language fr --gpu 1
+# python3 -m data_augmentation --language es --gpu 2
+# python3 -m data_augmentation --language de --gpu 3
+# python3 -m data_augmentation --language it --gpu 4
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
@@ -64,11 +68,10 @@ def main(args):
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
     ds = datasets.load_dataset("glue", args.dataset)
 
-    train_ds = list(ds["train"])
+    train_ds = list(ds["train"])[: args.limit]
     print(f"Augmenting {len(train_ds)} sentences using {args.language}")
     aug_ds = augment_sentences(train_ds, args.language, args.gpu)
     print(f"Augmentation complete -- Saving tensor dataset to disk")
-    # random.shuffle(aug_ds[: args.limit])
     encodings = create_encodings(
         dataset=train_ds, tokenizer=tokenizer, name=args.dataset
     )
