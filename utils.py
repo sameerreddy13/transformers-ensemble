@@ -21,7 +21,7 @@ def compute_acc(model, dataloader, device):
     return sum(accs) / len(accs)
 
 
-def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
+def create_encodings(dataset, tokenizer, name):
     if name == "sst2":
         encodings = tokenizer(
             [example["sentence"] for example in dataset],
@@ -41,16 +41,20 @@ def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
         )
     else:
         raise ValueError(f"Unknown dataset {name}")
+    return encodings
 
+
+def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
+    encodings = create_encodings(dataset, tokenizer, name)
     labels = torch.tensor([example["label"] for example in dataset])
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
-    tensor_ds = torch.utils.data.TensorDataset(*tensors)
+    tensors_ds = torch.utils.data.TensorDataset(*tensors)
     if distillation:
         tensors.append(
             torch.tensor([example["bert_last_hidden_state"] for example in dataset])
         )
 
-    return torch.utils.data.DataLoader(tensor_ds, batch_size=batch_size)
+    return torch.utils.data.DataLoader(tensors_ds, batch_size=batch_size)
 
 
 # TODO(piyush) Incorporate difference of embedding vector magnitudes?
