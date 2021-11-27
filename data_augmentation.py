@@ -13,8 +13,7 @@ from tqdm import tqdm
 from utils import create_encodings, create_tensor_dataset
 
 
-# python3 -m data_augmentation --limit 10
-# python3 -m data_augmentation --language fr --gpu 1
+# python3 -m data_augmentation --language fr --gpu 1 --limit 50
 # python3 -m data_augmentation --language es --gpu 2
 # python3 -m data_augmentation --language de --gpu 3
 # python3 -m data_augmentation --language it --gpu 4
