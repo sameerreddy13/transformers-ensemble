@@ -49,9 +49,9 @@ def augment_sentences(ds, language, gpu="cuda:0"):
 def main(args):
     print(f"Save dir: {args.save_dir}")
 
-    if args.gpu is None or len(args.gpus) == 0:
+    if args.gpu is None or len(args.gpu) == 0:
         print("WARNING: Using CPU")
-        gpus = ["cpu"]
+        gpu = ["cpu"]
     else:
         print(f"Using GPU: {args.gpu}")
 
