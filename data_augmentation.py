@@ -6,33 +6,26 @@ import random
 
 import datasets
 import nlpaug.augmenter.word as naw
-# import torch
+import torch
 import transformers
 from tqdm import tqdm
 
-from utils import create_dataloader
+from utils import create_encodings, create_tensor_dataset
 
 
+# python3 -m data_augmentation --limit 10
 def parse_args():
     ap = argparse.ArgumentParser()
-
-    ap.add_argument("--save-dir", type=str, default="checkpoints")
-    ap.add_argument("--gpus", nargs="+", default=list(range(8)))
-    ap.add_argument("--seq-per-gpu", action="store_true", default=False)
-    ap.add_argument("--num-models", type=int, default=8)
+    ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
+    ap.add_argument("--gpu", type=str, default="cuda:0")
     ap.add_argument("--dataset", type=str, default="sst2")
-    # ap.add_argument("--extract-subnetwork", action="store_true", default=False)
-    # ap.add_argument("--num-epochs", type=int, default=100)
-    ap.add_argument("--batch-size", type=int, default=32)
-    # ap.add_argument("--val-batch-size", type=int, default=32)
-    # ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--limit", type=int, default=-1)
     ap.add_argument("--language", type=str, default="fr")
     # ['fr', 'de', 'es', 'it'] == [french, german, spanish, italian]
     return ap.parse_args()
 
 
-def augment_sentences(ds, language):
+def augment_sentences(ds, language, gpu="cuda:0"):
     """
     Augment sentences with nlpaug
     """
@@ -41,7 +34,7 @@ def augment_sentences(ds, language):
     aug = naw.BackTranslationAug(
         from_model_name=f"Helsinki-NLP/opus-mt-en-{language}",
         to_model_name=f"Helsinki-NLP/opus-mt-{language}-en",
-        device="cuda",
+        device=gpu,
         batch_size=1024,
     )
     for entry in tqdm(ds):
@@ -56,14 +49,12 @@ def augment_sentences(ds, language):
 def main(args):
     print(f"Save dir: {args.save_dir}")
 
-    if args.gpus is None or len(args.gpus) == 0:
+    if args.gpu is None or len(args.gpus) == 0:
         print("WARNING: Using CPU")
         gpus = ["cpu"]
     else:
-        gpus = [f"cuda:{i}" for i in args.gpus]
-        print(f"Using GPUs: {', '.join(gpus)}")
+        print(f"Using GPU: {args.gpu}")
 
-    # Set up data loader.
     print(
         f"Augmenting the training split from dataset: {args.dataset}"
         f"using back translation with Helsinki-NLP/opus-mt-en-{args.language}"
@@ -74,21 +65,20 @@ def main(args):
     ds = datasets.load_dataset("glue", args.dataset)
 
     train_ds = list(ds["train"])
-    aug_ds = augment_sentences(train_ds, args.language)
+    print(f"Augmenting {len(train_ds)} sentences using {args.language}")
+    aug_ds = augment_sentences(train_ds, args.language, args.gpu)
+    print(f"Augmentation complete -- Saving tensor dataset to disk")
+    # random.shuffle(aug_ds[: args.limit])
+    encodings = create_encodings(
+        dataset=train_ds, tokenizer=tokenizer, name=args.dataset
+    )
+    tensors_ds = create_tensor_dataset(
+        dataset=train_ds, encodings=encodings, distillation=False
+    )
 
-    random.shuffle(aug_ds[: args.limit])
-    partition_size = len(aug_ds) // args.num_models + 1
-    train_dataloaders = [
-        create_dataloader(
-            aug_ds[i : i + partition_size],
-            tokenizer,
-            args.batch_size,
-            args.dataset,
-            distillation=args.distillation_dataset is not None,
-        )
-        for i in range(0, len(aug_ds), partition_size)
-    ]
-    print(f"Partitioned {len(train_ds)} total training samples")
+    output_path = f"{args.save_dir}/{args.dataset}_{args.language}.pt"
+    torch.save(obj=tensors_ds, f=output_path)
+    print(f"Saved tensor dataset to {output_path}")
 
 
 if __name__ == "__main__":
