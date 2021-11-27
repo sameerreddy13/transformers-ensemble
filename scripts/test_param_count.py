@@ -12,8 +12,11 @@ import transformers
 def parse_args():
     ap = argparse.ArgumentParser()
 
-    ap.add_argument("--save-dir", type=str,
-                    default="paramcounts_n32_labels2_hsize_numhlayers_nattheads_fcsize")
+    ap.add_argument(
+        "--save-dir",
+        type=str,
+        default="paramcounts_n32_labels2_hsize_numhlayers_nattheads_fcsize",
+    )
     ap.add_argument("--n", type=int, default=32)
     ap.add_argument("--num-processes", type=int, default=8)
     ap.add_argument("--resume", action="store_true", default=False)
@@ -27,7 +30,12 @@ def compute_vals(args):
     task_id, grid, vals = args
     filename = os.path.join(ARGS.save_dir, f"vals_{task_id}.pkl")
 
-    for i, (hidden_size, num_hidden_layers, num_attention_heads, intermediate_size) in enumerate(grid):
+    for i, (
+        hidden_size,
+        num_hidden_layers,
+        num_attention_heads,
+        intermediate_size,
+    ) in enumerate(grid):
         if ARGS.model == "albert":
             config = transformers.AlbertConfig(
                 hidden_size=hidden_size,
@@ -40,7 +48,12 @@ def compute_vals(args):
         elif ARGS.model == "bert":
             if hidden_size % num_attention_heads != 0:
                 hidden_size = (hidden_size // num_attention_heads) * num_attention_heads
-                if (hidden_size, num_hidden_layers, num_attention_heads, intermediate_size) in vals:
+                if (
+                    hidden_size,
+                    num_hidden_layers,
+                    num_attention_heads,
+                    intermediate_size,
+                ) in vals:
                     continue
             config = transformers.BertConfig(
                 hidden_size=hidden_size,
@@ -53,13 +66,17 @@ def compute_vals(args):
             raise ValueError(f"Unknown model {ARGS.model}")
 
         n_params = sum([param.numel() for param in model.parameters()])
-        vals[(hidden_size, num_hidden_layers, num_attention_heads, intermediate_size)] = n_params
+        vals[
+            (hidden_size, num_hidden_layers, num_attention_heads, intermediate_size)
+        ] = n_params
 
         if i % ARGS.save_freq == 0:
             with open(filename, "wb") as f:
                 pickle.dump(vals, f)
-            print(f"[Process {task_id}] [{datetime.datetime.now()}] [Iter {i}] Saved progress to",
-                  filename)
+            print(
+                f"[Process {task_id}] [{datetime.datetime.now()}] [Iter {i}] Saved progress to",
+                filename,
+            )
 
     with open(filename, "wb") as f:
         pickle.dump(vals, f)
@@ -71,19 +88,35 @@ def main():
     print(f"Saving outputs to {ARGS.save_dir}")
 
     if ARGS.model == "albert":
-        grid = list(itertools.product(*[
-            [int(4096 * k / ARGS.n) for k in range(1, ARGS.n + 1)],   # hidden_size
-            range(1, 12 + 1),                                         # num_hidden_layers
-            range(1, 64 + 1),                                         # num_attention_heads
-            [int(16384 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # intermediate_size
-        ]))
+        grid = list(
+            itertools.product(
+                *[
+                    [
+                        int(4096 * k / ARGS.n) for k in range(1, ARGS.n + 1)
+                    ],  # hidden_size
+                    range(1, 12 + 1),  # num_hidden_layers
+                    range(1, 64 + 1),  # num_attention_heads
+                    [
+                        int(16384 * k / ARGS.n) for k in range(1, ARGS.n + 1)
+                    ],  # intermediate_size
+                ]
+            )
+        )
     elif ARGS.model == "bert":
-        grid = list(itertools.product(*[
-            [int(768 * k / ARGS.n) for k in range(1, ARGS.n + 1)],   # hidden_size
-            range(1, 12 + 1),                                        # num_hidden_layers
-            range(1, 12 + 1),                                        # num_attention_heads
-            [int(3072 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # intermediate_size
-        ]))
+        grid = list(
+            itertools.product(
+                *[
+                    [
+                        int(768 * k / ARGS.n) for k in range(1, ARGS.n + 1)
+                    ],  # hidden_size
+                    range(1, 12 + 1),  # num_hidden_layers
+                    range(1, 12 + 1),  # num_attention_heads
+                    [
+                        int(3072 * k / ARGS.n) for k in range(1, ARGS.n + 1)
+                    ],  # intermediate_size
+                ]
+            )
+        )
     else:
         raise ValueError(f"Unknown model {ARGS.model}")
     random.shuffle(grid)

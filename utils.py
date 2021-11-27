@@ -12,7 +12,9 @@ def compute_acc(model, dataloader, device):
         attention_mask = example[1].to(device)
         labels = example[2].to(device)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        outputs = model(
+            input_ids=input_ids, attention_mask=attention_mask, labels=labels
+        )
         logits = outputs.logits
 
         accs.append((logits.argmax(axis=-1) == labels).float().mean())
@@ -22,23 +24,33 @@ def compute_acc(model, dataloader, device):
 def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
     if name == "sst2":
         encodings = tokenizer(
-            [example['sentence'] for example in dataset], max_length=128, add_special_tokens=True,
-            padding="max_length", return_tensors='pt')
+            [example["sentence"] for example in dataset],
+            max_length=128,
+            add_special_tokens=True,
+            padding="max_length",
+            return_tensors="pt",
+        )
     elif name == "mnli":
         encodings = tokenizer(
             [example["premise"] for example in dataset],
             [example["hypothesis"] for example in dataset],
-            max_length=128, add_special_tokens=True, padding="max_length", return_tensors='pt')
+            max_length=128,
+            add_special_tokens=True,
+            padding="max_length",
+            return_tensors="pt",
+        )
     else:
         raise ValueError(f"Unknown dataset {name}")
 
     labels = torch.tensor([example["label"] for example in dataset])
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
+    tensor_ds = torch.utils.data.TensorDataset(*tensors)
     if distillation:
-        tensors.append(torch.tensor([example["bert_last_hidden_state"] for example in dataset]))
+        tensors.append(
+            torch.tensor([example["bert_last_hidden_state"] for example in dataset])
+        )
 
-    return torch.utils.data.DataLoader(
-        torch.utils.data.TensorDataset(*tensors), batch_size=batch_size)
+    return torch.utils.data.DataLoader(tensor_ds, batch_size=batch_size)
 
 
 # TODO(piyush) Incorporate difference of embedding vector magnitudes?
@@ -46,7 +58,9 @@ def distillation_loss(features, target_features, mask=None):
     if mask is not None:
         features = features * mask.unsqueeze(-1)
         target_features = target_features * mask.unsqueeze(-1)
-    similarity = torch.nn.functional.cosine_similarity(features, target_features, dim=-1)
+    similarity = torch.nn.functional.cosine_similarity(
+        features, target_features, dim=-1
+    )
     loss = (1 - similarity.abs()) * mask
     # loss = (features - target_features).norm(dim=-1) # TODO(piyush) remove
 
@@ -59,7 +73,7 @@ def extract_subnetwork_from_bert(
     # hidden_size=None, # TODO(piyush) remove
     num_hidden_layers=None,
     num_attention_heads=None,
-    intermediate_size=None
+    intermediate_size=None,
 ):
     """
     For reference, the BERT module structure:
@@ -95,18 +109,26 @@ def extract_subnetwork_from_bert(
         dropout
         classifier: Linear(hidden_size, num_labels)
     """
-    model = transformers.BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    model = transformers.BertForSequenceClassification.from_pretrained(
+        "bert-base-uncased"
+    )
     bert = model.bert
 
     # Randomly select layers.
     if num_hidden_layers is not None:
-        layers = sorted(random.sample(range(bert.config.num_hidden_layers), num_hidden_layers))
-        bert.encoder.layer = torch.nn.ModuleList([bert.encoder.layer[i] for i in layers])
+        layers = sorted(
+            random.sample(range(bert.config.num_hidden_layers), num_hidden_layers)
+        )
+        bert.encoder.layer = torch.nn.ModuleList(
+            [bert.encoder.layer[i] for i in layers]
+        )
         bert.config.num_hidden_layers = num_hidden_layers
 
     # Randomly drop out neurons in fully connected layers.
     if intermediate_size is not None:
-        output_neurons = sorted(random.sample(range(bert.config.intermediate_size), intermediate_size))
+        output_neurons = sorted(
+            random.sample(range(bert.config.intermediate_size), intermediate_size)
+        )
         for i in range(len(bert.encoder.layer)):
             layer = bert.encoder.layer[i].intermediate.dense
             layer.weight = torch.nn.Parameter(layer.weight[output_neurons])
@@ -121,7 +143,9 @@ def extract_subnetwork_from_bert(
     # Randomly drop out attention heads.
     if num_attention_heads is not None:
         assert bert.config.hidden_size % num_attention_heads == 0
-        heads = sorted(random.sample(range(bert.config.num_attention_heads), num_attention_heads))
+        heads = sorted(
+            random.sample(range(bert.config.num_attention_heads), num_attention_heads)
+        )
         for i in range(len(bert.encoder.layer)):
             attention = bert.encoder.layer[i].attention
 
@@ -130,22 +154,46 @@ def extract_subnetwork_from_bert(
             layer.all_head_size = num_attention_heads * layer.attention_head_size
 
             for matrix in (layer.query, layer.key, layer.value):
-                matrix.weight = torch.nn.Parameter(torch.cat([
-                    matrix.weight[
-                        h * layer.attention_head_size : (h + 1) * layer.attention_head_size]
-                    for h in heads
-                ]))
-                matrix.bias = torch.nn.Parameter(torch.cat([
-                    matrix.bias[h * layer.attention_head_size : (h + 1) * layer.attention_head_size]
-                    for h in heads
-                ]))
+                matrix.weight = torch.nn.Parameter(
+                    torch.cat(
+                        [
+                            matrix.weight[
+                                h
+                                * layer.attention_head_size : (h + 1)
+                                * layer.attention_head_size
+                            ]
+                            for h in heads
+                        ]
+                    )
+                )
+                matrix.bias = torch.nn.Parameter(
+                    torch.cat(
+                        [
+                            matrix.bias[
+                                h
+                                * layer.attention_head_size : (h + 1)
+                                * layer.attention_head_size
+                            ]
+                            for h in heads
+                        ]
+                    )
+                )
                 matrix.out_features = layer.all_head_size
 
-            attention.output.dense.weight = torch.nn.Parameter(torch.cat([
-                attention.output.dense.weight[
-                    :, h * layer.attention_head_size : (h + 1) * layer.attention_head_size]
-                for h in heads
-            ], dim=1))
+            attention.output.dense.weight = torch.nn.Parameter(
+                torch.cat(
+                    [
+                        attention.output.dense.weight[
+                            :,
+                            h
+                            * layer.attention_head_size : (h + 1)
+                            * layer.attention_head_size,
+                        ]
+                        for h in heads
+                    ],
+                    dim=1,
+                )
+            )
             attention.output.dense.in_features = layer.all_head_size
         bert.config.num_attention_heads = num_attention_heads
         bert.config.attention_head_size = bert.config.hidden_size // num_attention_heads

@@ -53,14 +53,21 @@ def train_one_epoch(
         attention_mask = example[1].to(device, non_blocking=True)
         labels = example[2].to(device, non_blocking=True)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
-                        output_hidden_states=True)
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            output_hidden_states=True,
+        )
         loss = outputs.loss
 
         if distillation:
             bert_last_hidden_state = example[3].to(device, non_blocking=True)
             distill_loss = utils.distillation_loss(
-                outputs["hidden_states"][-1], bert_last_hidden_state, mask=attention_mask)
+                outputs["hidden_states"][-1],
+                bert_last_hidden_state,
+                mask=attention_mask,
+            )
             loss = loss + distill_loss
 
         optimizer.zero_grad()
@@ -68,8 +75,10 @@ def train_one_epoch(
         optimizer.step()
 
         if i % print_freq == 0:
-            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: "
-                  f"loss = {loss.item()}")
+            print(
+                f"{prefix} Step {i + 1} of {len(train_dataloader)}: "
+                f"loss = {loss.item()}"
+            )
             train_losses[i] = loss.item()
 
     model = model.eval()
@@ -97,6 +106,7 @@ def train_wrapper(kwargs):
     """
     return train(**kwargs)
 
+
 def train(
     task_id,
     model,
@@ -120,9 +130,16 @@ def train(
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
     for epoch in range(num_epochs):
         epoch_metrics = train_one_epoch(
-            model, train_dataloader, val_dataloader, optimizer, device,
-            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"), print_freq=print_freq,
-            distillation=distillation, prefix=f"{prefix} [Epoch {epoch}]")
+            model,
+            train_dataloader,
+            val_dataloader,
+            optimizer,
+            device,
+            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"),
+            print_freq=print_freq,
+            distillation=distillation,
+            prefix=f"{prefix} [Epoch {epoch}]",
+        )
         metrics[epoch] = epoch_metrics
 
     return metrics
@@ -152,9 +169,15 @@ def train_share_gpu(jobs):
             print(f"{job_prefix} Moved model to device {device}")
 
             epoch_metrics = train_one_epoch(
-                model, job["train_dataloader"], job["val_dataloader"], optimizers[i], device,
+                model,
+                job["train_dataloader"],
+                job["val_dataloader"],
+                optimizers[i],
+                device,
                 save_path=os.path.join(job["save_dir"], f"model_epoch{epoch}.pt"),
-                distillation=job["distillation"], prefix=f"{job_prefix} [Epoch {epoch}]")
+                distillation=job["distillation"],
+                prefix=f"{job_prefix} [Epoch {epoch}]",
+            )
             metrics[i][epoch] = epoch_metrics
 
     return metrics
@@ -182,18 +205,23 @@ def main(args):
     else:
         ds = datasets.load_dataset("glue", args.dataset)
 
-    train_ds = list(ds["train"])[:args.limit]
+    train_ds = list(ds["train"])[: args.limit]
     random.shuffle(train_ds)
     partition_size = len(train_ds) // args.num_models + 1
     train_dataloaders = [
         utils.create_dataloader(
-            train_ds[i : i + partition_size], tokenizer, args.batch_size, args.dataset,
-            distillation=args.distillation_dataset is not None)
+            train_ds[i : i + partition_size],
+            tokenizer,
+            args.batch_size,
+            args.dataset,
+            distillation=args.distillation_dataset is not None,
+        )
         for i in range(0, len(train_ds), partition_size)
     ]
     print(f"Partitioned {len(train_ds)} total training samples")
     val_dataloader = utils.create_dataloader(
-        ds['validation'], tokenizer, args.val_batch_size, args.dataset)
+        ds["validation"], tokenizer, args.val_batch_size, args.dataset
+    )
 
     # Build models.
     print("Building models")
@@ -202,14 +230,17 @@ def main(args):
         models = [
             utils.extract_subnetwork_from_bert(
                 # TODO(piyush) Select automatically based on --num-models
-                num_hidden_layers=6, num_attention_heads=6, intermediate_size=3072 // 2)
+                num_hidden_layers=6,
+                num_attention_heads=6,
+                intermediate_size=3072 // 2,
+            )
             for _ in range(args.num_models)
         ]
     else:
         config = transformers.BertConfig(
             # TODO(piyush) Don't hard-code (this is for 8 models).
             num_hidden_layers=3,
-            intermediate_size=int(3072 * 4/16),
+            intermediate_size=int(3072 * 4 / 16),
         )
         models = [
             transformers.BertForSequenceClassification(config)
@@ -218,16 +249,25 @@ def main(args):
 
     # Preserve the same total parameter count as original BERT, within a 10% margin
     # (excluding embedding layers).
-    n_params = sum([
-        param.numel()
-        for name, param in models[0].named_parameters()
-        if all(
-            param_name not in name
-            for param_name in ("word_embeddings", "position_embeddings", "token_type_embeddings"))
-    ])
+    n_params = sum(
+        [
+            param.numel()
+            for name, param in models[0].named_parameters()
+            if all(
+                param_name not in name
+                for param_name in (
+                    "word_embeddings",
+                    "position_embeddings",
+                    "token_type_embeddings",
+                )
+            )
+        ]
+    )
     param_ratio = n_params / BERT_N_PARAMS_NO_EMB
-    print(f"Created {args.num_models} models, each with {n_params / 1e6} million parameters "
-          f"({param_ratio * 100}%) (not counting embedding layers)")
+    print(
+        f"Created {args.num_models} models, each with {n_params / 1e6} million parameters "
+        f"({param_ratio * 100}%) (not counting embedding layers)"
+    )
     if not (1 / 1.1 <= args.num_models * param_ratio <= 1.1):
         print("WARNING: Total number of parameters isn't within 10% of BERT")
 
@@ -263,6 +303,7 @@ def main(args):
     with open(metrics_save_path, "wb") as f:
         pickle.dump(metrics_save_path, f)
     print(f"Done. Saved all metrics to: {metrics_save_path}")
+
 
 if __name__ == "__main__":
     main(parse_args())
