@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
 conda activate 8803 && cd ~/repo_team1 || exit
 tmux new -d -s aug_fr 'python3 -m data_augmentation --gpu cuda:1 --language fr --limit 100'
