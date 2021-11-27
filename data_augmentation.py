@@ -16,11 +16,11 @@ from utils import create_encodings, create_tensor_dataset
 
 def parse_args():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
-    ap.add_argument("--gpu", type=str, default="cuda:0")
     ap.add_argument("--dataset", type=str, default="sst2")
+    ap.add_argument("--gpu", type=str, default="cuda:0")
     ap.add_argument("--limit", type=int, default=-1)
     ap.add_argument("--language", type=str, default="fr")
+    ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
     # ['fr', 'de', 'es', 'it'] == [french, german, spanish, italian]
     return ap.parse_args()
 
