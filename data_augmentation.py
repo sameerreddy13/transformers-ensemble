@@ -14,10 +14,6 @@ from tqdm import tqdm
 from utils import create_encodings, create_tensor_dataset
 
 
-# python3 -m data_augmentation --language fr --gpu cuda:1 --limit 50
-# python3 -m data_augmentation --language es --gpu cuda:2
-# python3 -m data_augmentation --language de --gpu cuda:3
-# python3 -m data_augmentation --language it --gpu cuda:4
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--save-dir", type=str, default="data/augmented_train_ds")
