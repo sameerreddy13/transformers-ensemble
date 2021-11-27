@@ -44,8 +44,7 @@ def create_encodings(dataset, tokenizer, name):
     return encodings
 
 
-def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
-    encodings = create_encodings(dataset, tokenizer, name)
+def create_tensor_dataset(dataset, encodings, distillation=False):
     labels = torch.tensor([example["label"] for example in dataset])
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
     tensors_ds = torch.utils.data.TensorDataset(*tensors)
@@ -53,8 +52,14 @@ def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
         tensors.append(
             torch.tensor([example["bert_last_hidden_state"] for example in dataset])
         )
+    return tensors_ds
 
-    return torch.utils.data.DataLoader(tensors_ds, batch_size=batch_size)
+
+def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
+    encodings = create_encodings(dataset, tokenizer, name)
+    tensors_ds = create_tensor_dataset(dataset, encodings, distillation)
+    dataloader = torch.utils.data.DataLoader(tensors_ds, batch_size=batch_size)
+    return dataloader
 
 
 # TODO(piyush) Incorporate difference of embedding vector magnitudes?
