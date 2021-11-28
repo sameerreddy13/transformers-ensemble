@@ -70,7 +70,9 @@ def combine_datasets():
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     output_path = Path(f"{save_dir}/{dataset}_augmented.pt")
     torch.save(obj=train_ds, f=output_path)
-    print(f"Saved tensor dataset to {output_path}")
+    print(f"Saved tensor dataset to {output_path} -- Testing the save")
+    _combined_dataset = torch.load(f=output_path)
+    print(f"Reloaded the combined dataset with length {len(_combined_dataset)}")
 
 
 def main(args):
