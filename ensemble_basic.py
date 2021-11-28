@@ -25,7 +25,7 @@ def parse_args():
     ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--distillation-dataset", type=str, default=None)
-    ap.add_argument("--augmented", choices=('True', 'False'))
+    ap.add_argument("--augmented", choices=("True", "False"))
     ap.add_argument("--extract-subnetwork", action="store_true", default=False)
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
@@ -201,7 +201,7 @@ def main(args):
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
 
-    augmented = args.augmented == 'True'
+    augmented = args.augmented == "True"
     print(f"Using augmented data? : {augmented}")
     if augmented:
         aug_ds_path = Path(f"data/augmented_train_ds/{args.dataset}_augmented.pt")
