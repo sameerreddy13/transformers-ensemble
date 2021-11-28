@@ -83,7 +83,7 @@ def combine_datasets():
             exit(0)
         else:
             print("Please enter yes or no.")
-    torch.save(obj=train_ds, f=output_file)
+    torch.save(obj=tensors_ds, f=output_file)
     print(f"Saved tensor dataset to {output_file} -- Testing the save")
     _combined_dataset = torch.load(f=output_file)
     print(f"Reloaded the combined dataset with length {len(_combined_dataset)}")
