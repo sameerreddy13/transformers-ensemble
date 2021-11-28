@@ -65,17 +65,17 @@ def combine_datasets():
     for language in ["fr", "de", "es", "it"]:
         print(f"Loading augmented dataset for {language}")
         augmented_ds = torch.load(f"data/augmented_train_ds/{dataset}_{language}.pt")
-        tensors_ds += augmented_ds
+        tensors_ds = torch.utils.data.ConcatDataset((tensors_ds, augmented_ds))
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     output_file = Path(f"{save_dir}/{dataset}_augmented.pt")
 
     if output_file.is_file():
-        f"Existing file found at {output_file}, do you want to overwrite? [y/n]"
-        answer = input("yes||no:")
-        if answer == "yes":
+        print(f"Existing file found at {output_file}, do you want to overwrite? [y/n]")
+        answer = input("[y]es or [n]o: ")
+        if answer == "yes" or answer == "y":
             output_file.unlink()
-        elif answer == "no":
+        elif answer == "no" or answer == "n":
             print("Exiting")
             exit(0)
         else:
