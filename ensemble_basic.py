@@ -3,6 +3,7 @@ import concurrent.futures
 import os
 import pickle
 import random
+from pathlib import Path
 
 import datasets
 import torch
@@ -24,6 +25,9 @@ def parse_args():
     ap.add_argument("--num-models", type=int, default=8)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--distillation-dataset", type=str, default=None)
+    ap.add_argument("--augmented-dataset", dest="augmented", action="store_true")
+    ap.add_argument("--no-augmented-dataset", dest="augmented", action="store_false")
+    ap.set_defaults(augmented=False)
     ap.add_argument("--extract-subnetwork", action="store_true", default=False)
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
@@ -198,30 +202,46 @@ def main(args):
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
-    if args.distillation_dataset is not None:
-        with open(args.distillation_dataset, "rb") as f:
-            ds = pickle.load(f)
-        print(f"Loaded distillation dataset from {args.distillation_dataset}")
-    else:
-        ds = datasets.load_dataset("glue", args.dataset)
 
-    train_ds = list(ds["train"])[: args.limit]
-    random.shuffle(train_ds)
-    partition_size = len(train_ds) // args.num_models + 1
-    train_dataloaders = [
-        utils.create_dataloader(
-            train_ds[i : i + partition_size],
-            tokenizer,
-            args.batch_size,
-            args.dataset,
-            distillation=args.distillation_dataset is not None,
+    if args.augmented:
+        aug_ds_path = Path(f"data/augmented_train_ds/{args.dataset}_augmented.pt")
+        tensors_ds = torch.load(aug_ds_path)[: args.limit]
+        partition_size = len(tensors_ds) // args.num_models + 1
+        train_dataloaders = [
+            torch.utils.data.DataLoader(
+                tensors_ds[i : i + partition_size], batch_size=args.batch_size
+            )
+            for i in range(0, len(tensors_ds), partition_size)
+        ]
+        print(f"Partitioned {len(tensors_ds)} total training samples")
+        ds = datasets.load_dataset("glue", args.dataset)
+        val_dataloader = utils.create_dataloader(
+            ds["validation"], tokenizer, args.val_batch_size, args.dataset
         )
-        for i in range(0, len(train_ds), partition_size)
-    ]
-    print(f"Partitioned {len(train_ds)} total training samples")
-    val_dataloader = utils.create_dataloader(
-        ds["validation"], tokenizer, args.val_batch_size, args.dataset
-    )
+    else:
+        if args.distillation_dataset is not None:
+            with open(args.distillation_dataset, "rb") as f:
+                ds = pickle.load(f)
+            print(f"Loaded distillation dataset from {args.distillation_dataset}")
+        else:
+            ds = datasets.load_dataset("glue", args.dataset)
+        train_ds = list(ds["train"])[: args.limit]
+        random.shuffle(train_ds)
+        partition_size = len(train_ds) // args.num_models + 1
+        train_dataloaders = [
+            utils.create_dataloader(
+                train_ds[i : i + partition_size],
+                tokenizer,
+                args.batch_size,
+                args.dataset,
+                distillation=args.distillation_dataset is not None,
+            )
+            for i in range(0, len(train_ds), partition_size)
+        ]
+        print(f"Partitioned {len(train_ds)} total training samples")
+        val_dataloader = utils.create_dataloader(
+            ds["validation"], tokenizer, args.val_batch_size, args.dataset
+        )
 
     # Build models.
     print("Building models")
