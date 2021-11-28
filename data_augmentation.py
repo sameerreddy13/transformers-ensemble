@@ -62,10 +62,13 @@ def combine_datasets():
     tensors_ds = create_tensor_dataset(
         dataset=train_ds, encodings=encodings, distillation=False
     )
+    print(f"Original dataset has length {len(tensors_ds)}")
     for language in ["fr", "de", "es", "it"]:
         print(f"Loading augmented dataset for {language}")
         augmented_ds = torch.load(f"data/augmented_train_ds/{dataset}_{language}.pt")
+        print(f"{language} augmented dataset has length {len(augmented_ds)}")
         tensors_ds = torch.utils.data.ConcatDataset((tensors_ds, augmented_ds))
+        print(f"Combined dataset now has length {len(tensors_ds)}")
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     output_file = Path(f"{save_dir}/{dataset}_augmented.pt")
