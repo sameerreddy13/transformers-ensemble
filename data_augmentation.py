@@ -50,26 +50,25 @@ def combine_datasets():
     """
     Combine the augmented datasets
     """
-    args = parse_args()
+    # TODO: undo hard code if needed
+    dataset = "sst2"
+    save_dir = "data/augmented_train_ds"
+
     print(f"Combining augmented datasets")
-    ds = datasets.load_dataset("glue", args.dataset)
+    ds = datasets.load_dataset("glue", dataset)
     train_ds = list(ds["train"])
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
-    encodings = create_encodings(
-        dataset=train_ds, tokenizer=tokenizer, name=args.dataset
-    )
+    encodings = create_encodings(dataset=train_ds, tokenizer=tokenizer, name=dataset)
     tensors_ds = create_tensor_dataset(
         dataset=train_ds, encodings=encodings, distillation=False
     )
     for language in ["fr", "de", "es", "it"]:
         print(f"Loading augmented dataset for {language}")
-        augmented_ds = torch.load(
-            f"data/augmented_train_ds/{args.dataset}_{language}.pt"
-        )
+        augmented_ds = torch.load(f"data/augmented_train_ds/{dataset}_{language}.pt")
         tensors_ds = torch.utils.data.ConcatDataset((tensors_ds, augmented_ds))
 
-    Path(args.save_dir).mkdir(parents=True, exist_ok=True)
-    output_path = Path(f"{args.save_dir}/{args.dataset}_augmented.pt")
+    Path(save_dir).mkdir(parents=True, exist_ok=True)
+    output_path = Path(f"{save_dir}/{dataset}_augmented.pt")
     torch.save(obj=train_ds, f=output_path)
     print(f"Saved tensor dataset to {output_path}")
 
