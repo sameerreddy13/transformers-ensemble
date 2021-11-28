@@ -65,7 +65,7 @@ def combine_datasets():
     for language in ["fr", "de", "es", "it"]:
         print(f"Loading augmented dataset for {language}")
         augmented_ds = torch.load(f"data/augmented_train_ds/{dataset}_{language}.pt")
-        tensors_ds = torch.utils.data.ConcatDataset((tensors_ds, augmented_ds))
+        tensors_ds += augmented_ds
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
     output_path = Path(f"{save_dir}/{dataset}_augmented.pt")
