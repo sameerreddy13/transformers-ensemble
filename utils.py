@@ -1,12 +1,16 @@
 import random
+
 import numpy as np
 import torch
 import transformers
-from transformers import BertForSequenceClassification, BertConfig
+from transformers import BertConfig, BertForSequenceClassification
+
 # Number of parameters in the original pretrained BERT architecture.
 BERT_N_PARAMS = 109483778
 BERT_N_PARAMS_NO_EMB = 85648130
 ENSEMBLE_COUNTS = [1, 2, 4, 8, 16, 32]
+
+
 @torch.no_grad()
 def compute_acc(model, dataloader, device):
     accs = []
@@ -82,7 +86,7 @@ def distillation_loss(features, target_features, mask=None):
 
 
 def get_subnet_configs_fixed(num_models, **kwargs):
-    '''
+    """
     Return list of model configs from num_models.
 
     TODO - support heterogenous model types
@@ -97,81 +101,75 @@ def get_subnet_configs_fixed(num_models, **kwargs):
             }
             ...
         ]
-    '''
+    """
     assert num_models in ENSEMBLE_COUNTS, f"Num models {num_models} not supported"
     base_config = {
         "num_hidden_layers": 12,
         "num_attention_heads": 12,
-        "intermediate_size": 3072
+        "intermediate_size": 3072,
     }
     if num_models == 2:
         base_config = {
             "num_hidden_layers": 6,
             "num_attention_heads": 12,
-            "intermediate_size": 3072
+            "intermediate_size": 3072,
         }
     elif num_models == 4:
         base_config = {
             "num_hidden_layers": 6,
             "num_attention_heads": 6,
-            "intermediate_size": 3072 // 2
+            "intermediate_size": 3072 // 2,
         }
     elif num_models == 8:
         base_config = {
             "num_hidden_layers": 4,
             "num_attention_heads": 6,
-            "intermediate_size": 3072 // 3
+            "intermediate_size": 3072 // 3,
         }
     elif num_models == 16:
         base_config = {
             "num_hidden_layers": 2,
             "num_attention_heads": 4,
-            "intermediate_size": 3072 // 3
+            "intermediate_size": 3072 // 3,
         }
     elif num_models == 32:
         base_config = {
             "num_hidden_layers": 1,
             "num_attention_heads": 4,
-            "intermediate_size": 3072 // 4
+            "intermediate_size": 3072 // 4,
         }
     return [base_config.copy() for _ in range(num_models)]
 
+
 def get_subnet_configs_beta(num_models, beta=0.95, base_hidden_size=768):
-    '''
+    """
     Heuristic based around num_models for automatically
     getting subnet configs
-    '''
+    """
     import math
+
     m = pow(beta, num_models)
     if num_models == 1:
         m = 1
 
-    base_config = {
-        "num_hidden_layers": int(12 * m),
-        "intermediate_size": int(3072 * m)
-    }
+    base_config = {"num_hidden_layers": int(12 * m), "intermediate_size": int(3072 * m)}
     num_attention_heads = int(12 * m)
-    valid_attention_heads = [
-        a for a in range(1, 13)
-        if base_hidden_size % a == 0
-    ]
+    valid_attention_heads = [a for a in range(1, 13) if base_hidden_size % a == 0]
     num_attention_heads = min(
-        valid_attention_heads,
-        key=lambda x: abs(x-num_attention_heads)
+        valid_attention_heads, key=lambda x: abs(x - num_attention_heads)
     )
     base_config["num_attention_heads"] = num_attention_heads
     return [base_config.copy() for _ in range(num_models)]
 
+
 def get_naive_model(**config):
-    return BertForSequenceClassification(
-        BertConfig(
-            **config
-    ))
+    return BertForSequenceClassification(BertConfig(**config))
+
 
 def build_models(num_models, extract_subnetwork=False, architecture_selection="fixed"):
-    '''
+    """
     Build num_models models for ensemble
-    '''
+    """
     assert num_models > 0
     if architecture_selection.lower() == "fixed":
         configs = get_subnet_configs_fixed(num_models)
@@ -185,12 +183,11 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
         if num_models == 1:
             print("Using pretrained BERT for single model")
             models = [
-                BertForSequenceClassification.from_pretrained('bert-base-uncased')
+                BertForSequenceClassification.from_pretrained("bert-base-uncased")
             ]
         else:
             models = [
-                extract_subnetwork_from_bert(**configs[i])
-                for i in range(num_models)
+                extract_subnetwork_from_bert(**configs[i]) for i in range(num_models)
             ]
     else:
         print("Creating models from scratch")
@@ -200,12 +197,13 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
             num_attention_heads = cfg.pop("num_attention_heads")
             models.append(
                 # extract_subnetwork_from_bert(
-                    # pretrained=get_naive_model(**cfg),
-                    # num_attention_heads=num_attention_heads
+                # pretrained=get_naive_model(**cfg),
+                # num_attention_heads=num_attention_heads
                 # )
                 get_naive_model(**cfg)
             )
     return models
+
 
 def extract_subnetwork_from_bert(
     pretrained=None,
@@ -250,25 +248,28 @@ def extract_subnetwork_from_bert(
     if pretrained:
         model = pretrained
     else:
-        model = BertForSequenceClassification.from_pretrained(
-        "bert-base-uncased"
-    )
+        model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
     bert = model.bert
 
     # Randomly select layers.
-    if (num_hidden_layers is not None
-    and num_hidden_layers != bert.config.num_hidden_layers):    layers = sorted(
-            random.sample(range(bert.config.num_hidden_layers), num_hidden_layers))
+    if (
+        num_hidden_layers is not None
+        and num_hidden_layers != bert.config.num_hidden_layers
+    ):
+        layers = sorted(
+            random.sample(range(bert.config.num_hidden_layers), num_hidden_layers)
+        )
         # layers = range(num_hidden_layers)
-
         bert.encoder.layer = torch.nn.ModuleList(
             [bert.encoder.layer[i] for i in layers]
         )
         bert.config.num_hidden_layers = num_hidden_layers
 
     # Randomly drop out neurons in fully connected layers.
-    if (intermediate_size is not None
-    and intermediate_size != bert.config.intermediate_size):
+    if (
+        intermediate_size is not None
+        and intermediate_size != bert.config.intermediate_size
+    ):
         output_neurons = sorted(
             random.sample(range(bert.config.intermediate_size), intermediate_size)
         )
@@ -284,8 +285,10 @@ def extract_subnetwork_from_bert(
         bert.config.intermediate_size = intermediate_size
 
     # Randomly drop out attention heads.
-    if (num_attention_heads is not None
-    and num_attention_heads != bert.config.num_attention_heads):
+    if (
+        num_attention_heads is not None
+        and num_attention_heads != bert.config.num_attention_heads
+    ):
         assert bert.config.hidden_size % num_attention_heads == 0
         heads = sorted(
             random.sample(range(bert.config.num_attention_heads), num_attention_heads)
@@ -345,36 +348,48 @@ def extract_subnetwork_from_bert(
     model.bert = bert
     return model
 
+
 def get_param_count(model):
-    '''
+    """
     Get param counts not including embedding layers
-    '''
+    """
     # (excluding embedding layers).
-    n_params = sum([
-        param.numel()
-        for name, param in model.named_parameters()
-        if all(
-            param_name not in name
-            for param_name in ("word_embeddings", "position_embeddings", "token_type_embeddings"))
-    ])
+    n_params = sum(
+        [
+            param.numel()
+            for name, param in model.named_parameters()
+            if all(
+                param_name not in name
+                for param_name in (
+                    "word_embeddings",
+                    "position_embeddings",
+                    "token_type_embeddings",
+                )
+            )
+        ]
+    )
     return n_params
+
 
 def get_param_ratios(n_params, n_models):
     param_ratio = n_params / BERT_N_PARAMS_NO_EMB
     total_ratio = param_ratio * n_models
     return param_ratio, total_ratio
 
+
 def check_param_counts(models):
-    '''
+    """
     Helper for printing param counts of ensemble models and comparing with BERT
-    '''
+    """
     # Preserve the same total parameter count as original BERT, within a 10% margin
     # (excluding embedding layers).
     n_params = get_param_count(models[0])
     param_ratio, total_ratio = get_param_ratios(n_params, len(models))
-    print(f"Created {len(models)} models, each with {n_params / 1e6} million parameters "
-          f"({round(param_ratio * 100, 2)}% per model "
-          f"-> {round(total_ratio * 100, 2)}% total) "
-          f"(not counting embedding layers)")
+    print(
+        f"Created {len(models)} models, each with {n_params / 1e6} million parameters "
+        f"({round(param_ratio * 100, 2)}% per model "
+        f"-> {round(total_ratio * 100, 2)}% total) "
+        f"(not counting embedding layers)"
+    )
     if not (1 / 1.1 <= total_ratio <= 1.1):
         print("WARNING: Total number of parameters isn't within 10% of BERT")

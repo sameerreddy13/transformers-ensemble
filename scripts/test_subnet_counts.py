@@ -1,6 +1,7 @@
-import utils
-import pprint
 import argparse
+import pprint
+
+import utils
 
 
 def parse_args():
