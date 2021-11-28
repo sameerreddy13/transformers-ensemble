@@ -27,7 +27,7 @@ def parse_args():
     ap.add_argument("--distillation-dataset", type=str, default=None)
     ap.add_argument("--augmented-dataset", dest="augmented", action="store_true")
     ap.add_argument("--no-augmented-dataset", dest="augmented", action="store_false")
-    ap.set_defaults(augmented=False)
+    ap.set_defaults(augmented=True)
     ap.add_argument("--extract-subnetwork", action="store_true", default=False)
     ap.add_argument("--num-epochs", type=int, default=100)
     ap.add_argument("--batch-size", type=int, default=32)
