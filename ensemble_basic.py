@@ -205,7 +205,7 @@ def main(args):
     print(f"Using augmented data? : {augmented}")
     if augmented:
         aug_ds_path = Path(f"data/augmented_train_ds/{args.dataset}_augmented.pt")
-        tensors_ds = torch.load(aug_ds_path)[: args.limit]
+        tensors_ds = list(torch.load(aug_ds_path))[: args.limit]
         partition_size = len(tensors_ds) // args.num_models + 1
         train_dataloaders = [
             torch.utils.data.DataLoader(
