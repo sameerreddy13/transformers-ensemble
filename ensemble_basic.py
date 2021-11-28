@@ -11,24 +11,33 @@ import transformers
 
 import utils
 
+
 def parse_args():
     ap = argparse.ArgumentParser()
     default_help = "(default: %(default)s)"
     ap.add_argument("--save-dir", type=str, default="checkpoints", help=default_help)
     ap.add_argument("--gpus", nargs="+", default=list(range(8)), help=default_help)
-    ap.add_argument("--seq-per-gpu", action="store_true", default=False, help=default_help)
+    ap.add_argument(
+        "--seq-per-gpu", action="store_true", default=False, help=default_help
+    )
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
     ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
     ap.add_argument("--augmented", choices=("True", "False"))
-    ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
-    ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
+    ap.add_argument(
+        "--extract-subnetwork", action="store_true", default=False, help=default_help
+    )
+    ap.add_argument(
+        "--architecture-selection", type=str, default="fixed", help=default_help
+    )
     ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
     ap.add_argument("--batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
     ap.add_argument("--limit", type=int, default=-1, help=default_help)
-    ap.add_argument("-wd", "--weight-decay", type=float, default=0.01, help=default_help)
+    ap.add_argument(
+        "-wd", "--weight-decay", type=float, default=0.01, help=default_help
+    )
     ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
 
     return ap.parse_args()
@@ -118,11 +127,11 @@ def train(
     device,
     save_dir,
     lr=1e-5,
-    weight_decay=0.,
+    weight_decay=0.0,
     distillation=False,
     warmup_steps=0,
     num_epochs=100,
-    print_freq=50
+    print_freq=50,
 ):
     prefix = f"[Process {task_id}]"
     os.makedirs(save_dir, exist_ok=True)
@@ -132,13 +141,15 @@ def train(
     print(f"{prefix} Moved model to device {device}")
 
     metrics = {}
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
+    optimizer = torch.optim.SGD(
+        model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay
+    )
     scheduler = None
     if warmup_steps != 0:
         scheduler = transformers.get_linear_schedule_with_warmup(
             optimizer,
-            num_warmup_steps = warmup_steps,
-            num_training_steps = len(train_dataloader) * num_epochs
+            num_warmup_steps=warmup_steps,
+            num_training_steps=len(train_dataloader) * num_epochs,
         )
     for epoch in range(num_epochs):
         epoch_metrics = train_one_epoch(
@@ -147,14 +158,16 @@ def train(
             val_dataloader,
             optimizer,
             device,
-            scheduler=scheduler, distillation=distillation,save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"),
+            scheduler=scheduler,
+            distillation=distillation,
+            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"),
             print_freq=print_freq,
-
             prefix=f"{prefix} [Epoch {epoch}]",
         )
         metrics[epoch] = epoch_metrics
 
     return metrics
+
 
 def train_share_gpu(jobs):
     prefix = f"[Process {jobs[0]['task_id']}]"
@@ -166,7 +179,12 @@ def train_share_gpu(jobs):
     device = jobs[0]["device"]
     num_epochs = jobs[0]["num_epochs"]
     optimizers = [
-        torch.optim.SGD(job["model"].parameters(), lr=job["lr"], momentum=0.9, weight_decay=job['weight_decay'])
+        torch.optim.SGD(
+            job["model"].parameters(),
+            lr=job["lr"],
+            momentum=0.9,
+            weight_decay=job["weight_decay"],
+        )
         for job in jobs
     ]
     # TODO - support scheduler
@@ -192,6 +210,7 @@ def train_share_gpu(jobs):
             metrics[i][epoch] = epoch_metrics
 
     return metrics
+
 
 def main(args):
     print(f"Save dir: {args.save_dir}")
@@ -254,7 +273,7 @@ def main(args):
     models = utils.build_models(
         num_models=args.num_models,
         extract_subnetwork=args.extract_subnetwork,
-        architecture_selection=args.architecture_selection
+        architecture_selection=args.architecture_selection,
     )
     utils.check_param_counts(models)
     # Setup jobs.
@@ -269,13 +288,13 @@ def main(args):
             "num_epochs": args.num_epochs,
             "save_dir": os.path.join(args.save_dir, str(i)),
             "distillation": args.distillation_dataset is not None,
-            'weight_decay': args.weight_decay,
-            'warmup_steps': args.warmup_steps
+            "weight_decay": args.weight_decay,
+            "warmup_steps": args.warmup_steps,
         }
         for i in range(args.num_models)
     ]
     # Fixes too many open files error. (See https://github.com/pytorch/pytorch/issues/11201)
-    torch.multiprocessing.set_sharing_strategy('file_system')
+    torch.multiprocessing.set_sharing_strategy("file_system")
     # Train.
     if args.num_models == 1:
         metrics = train(**jobs[0])
