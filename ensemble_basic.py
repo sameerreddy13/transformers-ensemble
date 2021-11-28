@@ -12,22 +12,22 @@ import utils
 
 def parse_args():
     ap = argparse.ArgumentParser()
-
-    ap.add_argument("--save-dir", type=str, default="checkpoints")
-    ap.add_argument("--gpus", nargs="+", default=list(range(8)))
-    ap.add_argument("--seq-per-gpu", action="store_true", default=False)
-    ap.add_argument("--num-models", type=int, default=8)
-    ap.add_argument("--dataset", type=str, default="sst2")
-    ap.add_argument("--distillation-dataset", type=str, default=None)
-    ap.add_argument("--extract-subnetwork", action="store_true", default=False)
-    ap.add_argument("--architecture-selection", type=str, default="fixed")
-    ap.add_argument("--num-epochs", type=int, default=50)
-    ap.add_argument("--batch-size", type=int, default=32)
-    ap.add_argument("--val-batch-size", type=int, default=32)
-    ap.add_argument("--lr", type=float, default=1e-3)
-    ap.add_argument("--limit", type=int, default=-1)
-    ap.add_argument("-wd", "--weight-decay", type=float, default=0.01)
-    ap.add_argument("--warmup-steps", type=int, default=0)
+    default_help = "(default: %(default)s)"
+    ap.add_argument("--save-dir", type=str, default="checkpoints", help=default_help)
+    ap.add_argument("--gpus", nargs="+", default=list(range(8)), help=default_help)
+    ap.add_argument("--seq-per-gpu", action="store_true", default=False, help=default_help)
+    ap.add_argument("--num-models", type=int, default=8, help=default_help)
+    ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
+    ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
+    ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
+    ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
+    ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
+    ap.add_argument("--batch-size", type=int, default=32, help=default_help)
+    ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
+    ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
+    ap.add_argument("--limit", type=int, default=-1, help=default_help)
+    ap.add_argument("-wd", "--weight-decay", type=float, default=0.01, help=default_help)
+    ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
 
     return ap.parse_args()
 
