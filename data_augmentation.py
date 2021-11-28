@@ -68,10 +68,21 @@ def combine_datasets():
         tensors_ds += augmented_ds
 
     Path(save_dir).mkdir(parents=True, exist_ok=True)
-    output_path = Path(f"{save_dir}/{dataset}_augmented.pt")
-    torch.save(obj=train_ds, f=output_path)
-    print(f"Saved tensor dataset to {output_path} -- Testing the save")
-    _combined_dataset = torch.load(f=output_path)
+    output_file = Path(f"{save_dir}/{dataset}_augmented.pt")
+
+    if output_file.is_file():
+        f"Existing file found at {output_file}, do you want to overwrite? [y/n]"
+        answer = input("yes||no:")
+        if answer == "yes":
+            output_file.unlink()
+        elif answer == "no":
+            print("Exiting")
+            exit(0)
+        else:
+            print("Please enter yes or no.")
+    torch.save(obj=train_ds, f=output_file)
+    print(f"Saved tensor dataset to {output_file} -- Testing the save")
+    _combined_dataset = torch.load(f=output_file)
     print(f"Reloaded the combined dataset with length {len(_combined_dataset)}")
 
 
