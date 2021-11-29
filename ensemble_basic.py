@@ -21,7 +21,7 @@ def parse_args():
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
     ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
-    ap.add_argument("--augmented", choices=("True", "False"))
+    ap.add_argument("--augmented", action="store_true", default=False)
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
     ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
