@@ -29,7 +29,7 @@ def parse_args():
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
     ap.add_argument("--limit", type=int, default=-1, help=default_help)
-    ap.add_argument("-wd", "--weight-decay", type=float, default=0.01, help=default_help)
+    ap.add_argument("-wd", "--weight-decay", type=float, default=0.0, help=default_help)
     ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
 
     return ap.parse_args()
