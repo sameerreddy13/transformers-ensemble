@@ -140,10 +140,16 @@ def get_subnet_configs_beta(num_models, beta=0.95, base_hidden_size=768):
     return [base_config.copy() for _ in range(num_models)]    
 
 def get_naive_model(**config):
-    return BertForSequenceClassification(
+    num_attention_heads = config.pop("num_attention_heads", 12)
+    model = BertForSequenceClassification(
         BertConfig(
             **config
     ))
+    # Use extract subnetwork method to adjust attention heads
+    return extract_subnetwork_from_bert(
+        pretrained=model,
+        num_attention_heads=num_attention_heads
+    )
 
 def build_models(num_models, extract_subnetwork=False, architecture_selection="fixed"):
     '''
@@ -161,28 +167,30 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
         print("Extracting subnetworks from pretrained BERT")
         if num_models == 1:
             print("Using pretrained BERT for single model")
-            models = [
-                BertForSequenceClassification.from_pretrained('bert-base-uncased')
-            ]
-        else:
-            models = [
-                extract_subnetwork_from_bert(**configs[i])
-                for i in range(num_models)
-            ]
+        models = [
+            extract_subnetwork_from_bert(**configs[i])
+            for i in range(num_models)
+        ]
     else:
         print("Creating models from scratch")
-        models = []
-        for cfg in configs:
-            # Use extract subnetwork method to adjust attention heads
-            num_attention_heads = cfg.pop("num_attention_heads")
-            models.append(
-                extract_subnetwork_from_bert(
-                    pretrained=get_naive_model(**cfg),
-                    num_attention_heads=num_attention_heads
-                )
-            )
-    return models
+        models = [
+            get_naive_model(**configs[i])
+            for i in range(num_models)
+        ]
+    return models, configs
 
+def load_model_checkpoint(checkpoint_path, naive=False):
+    checkpoint = torch.load(checkpoint_path)
+    config = checkpoint['arch']
+    if naive:
+        if '11-27' in str(checkpoint_path): 
+            del config['num_attention_heads']
+        model = get_naive_model(**config)
+    else:
+        model = extract_subnetwork_from_bert(**config)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    return model    
+    
 def extract_subnetwork_from_bert(
     pretrained=None,
     num_hidden_layers=None,
