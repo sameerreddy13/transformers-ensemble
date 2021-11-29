@@ -15,21 +15,25 @@ import utils
 def parse_args():
     ap = argparse.ArgumentParser()
     default_help = "(default: %(default)s)"
+
     ap.add_argument("--save-dir", type=str, default="checkpoints", help=default_help)
     ap.add_argument("--save-all-epochs", action="store_true", default=False, help=default_help)
     ap.add_argument("--gpus", nargs="+", default=list(range(8)), help=default_help)
     ap.add_argument("--seq-per-gpu", action="store_true", default=False, help=default_help)
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
+
     ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
+    ap.add_argument("--limit", type=int, default=-1, help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
-    ap.add_argument("--augmented", action="store_true", default=False)
+    ap.add_argument("--augmented", action="store_true", default=False, help=default_help)
+
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
+
     ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
     ap.add_argument("--batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
-    ap.add_argument("--limit", type=int, default=-1, help=default_help)
     ap.add_argument("-wd", "--weight-decay", type=float, default=0.0, help=default_help)
     ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
 
@@ -42,6 +46,7 @@ def train_one_epoch(
     val_dataloader,
     optimizer,
     device,
+    arch,
     scheduler=None,
     distillation=False,
     print_freq=50,
@@ -90,6 +95,7 @@ def train_one_epoch(
         "train_acc": utils.compute_acc(model, train_dataloader, device=device),
         "val_acc": utils.compute_acc(model, val_dataloader, device=device),
         "train_losses": train_losses,
+        "arch": arch,
     }
     print(f"{prefix} Train accuracy: {metrics['train_acc']}")
     print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
@@ -108,6 +114,7 @@ def train_wrapper(kwargs):
 def train(
     task_id,
     model,
+    arch,
     train_dataloader,
     val_dataloader,
     device,
@@ -145,6 +152,7 @@ def train(
             val_dataloader,
             optimizer,
             device,
+            arch,
             scheduler=scheduler,
             distillation=distillation,
             print_freq=print_freq,
@@ -179,7 +187,10 @@ def train_share_gpu(jobs):
         )
         for job in jobs
     ]
+
     # TODO - support scheduler
+    if jobs[0]["warmup_steps"] != 0:
+        print("WARNING: Scheduler not supported with --seq-per-gpu")
 
     prev_val_accs = [- float("inf") for _ in range(len(jobs))]
     metrics = [{} for _ in range(len(jobs))]
@@ -197,17 +208,25 @@ def train_share_gpu(jobs):
                 job["val_dataloader"],
                 optimizers[i],
                 device,
+                job["arch"],
                 save_path=os.path.join(job["save_dir"], f"model_epoch{epoch}.pt"),
                 distillation=job["distillation"],
                 prefix=f"{job_prefix} [Epoch {epoch}]",
             )
             metrics[i][epoch] = epoch_metrics
 
+            if job["save_all"] or epoch_metrics["val_acc"] >= prev_val_accs[i]:
+                save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
+                torch.save(metrics, save_path)
+                print(f"{prefix} Saved model checkpoint to {save_path}")
+            prev_val_accs[i] = max(epoch_metrics["val_acc"], prev_val_accs[i])
+
     return metrics
 
 
 def main(args):
     print(f"Save dir: {args.save_dir}")
+
     # Determine devices
     if args.gpus is None or len(args.gpus) == 0:
         print("WARNING: Using CPU")
@@ -215,6 +234,7 @@ def main(args):
     else:
         gpus = [f"cuda:{i}" for i in args.gpus]
         print(f"Using GPUs: {', '.join(gpus)}")
+
     # Set up data loaders.
     print(f"Building dataloaders for dataset: {args.dataset}")
     if "TOKENIZERS_PARALLELISM" not in os.environ:
@@ -262,17 +282,19 @@ def main(args):
         )
 
     # Build models (and check param counts).
-    models = utils.build_models(
+    models, configs = utils.build_models(
         num_models=args.num_models,
         extract_subnetwork=args.extract_subnetwork,
         architecture_selection=args.architecture_selection,
     )
     utils.check_param_counts(models)
+
     # Setup jobs.
     jobs = [
         {
             "task_id": i,
             "model": models[i],
+            "arch": configs[i],
             "train_dataloader": train_dataloaders[i],
             "val_dataloader": val_dataloader,
             "device": gpus[i % len(gpus)],
@@ -286,8 +308,10 @@ def main(args):
         }
         for i in range(args.num_models)
     ]
+
     # Fixes too many open files error. (See https://github.com/pytorch/pytorch/issues/11201)
     torch.multiprocessing.set_sharing_strategy("file_system")
+
     # Train.
     if args.num_models == 1:
         metrics = train(**jobs[0])
@@ -301,6 +325,7 @@ def main(args):
     else:
         with torch.multiprocessing.Pool(len(jobs)) as pool:
             metrics = pool.map(train_wrapper, jobs)
+
     # Save final metrics.
     metrics_save_path = os.path.join(args.save_dir, "all_metrics.pkl")
     with open(metrics_save_path, "wb") as f:
