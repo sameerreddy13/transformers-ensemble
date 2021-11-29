@@ -1,11 +1,15 @@
-import utils
-import pprint
 import argparse
+import pprint
+
+import utils
+
+
 def parse_args():
-	ap = argparse.ArgumentParser()
-	ap.add_argument("--subnet-beta", action="store_true")
-	ap.add_argument("--subnet-fixed", action="store_true")
-	return ap.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--subnet-beta", action="store_true")
+    ap.add_argument("--subnet-fixed", action="store_true")
+    return ap.parse_args()
+
 
 def show_models(subnet_beta=False, subnet_fixed=False):
 	results = []
@@ -28,8 +32,8 @@ def show_models(subnet_beta=False, subnet_fixed=False):
 		results.append(config)	
 	pprint.pp(list(zip(utils.ENSEMBLE_COUNTS, results)))
 
-if __name__== '__main__':
-	args = parse_args()
-	print(args)
-	show_models(subnet_beta=args.subnet_beta)
-	show_models(subnet_fixed=args.subnet_fixed)
+if __name__ == "__main__":
+    args = parse_args()
+    print(args)
+    show_models(subnet_beta=args.subnet_beta)
+    show_models(subnet_fixed=args.subnet_fixed)

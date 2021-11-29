@@ -10,17 +10,13 @@ Requires Miniconda 3.9.5
 - git clone repo
 - wget miniconda
 - install miniconda3
-- install conda env
--- use environment.yml
+- install conda env using environment.yml
+```
 
-or
-
-#conda install -c huggingface transformers==4.11.0 datasets 
-
-
-conda install -c conda-forge transformers datasets
-conda install -c pytorch pytorch torchvision torchaudio cudatoolkit=11.3
-conda install -c conda-forge sentencepiece
+```
+pip install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
+pip install transformers datasets
+pip install numpy request nlpaug tqdm sentencepiece
 ```
 
 
