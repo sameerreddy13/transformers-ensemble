@@ -19,9 +19,7 @@ def compute_acc(model, dataloader, device):
         attention_mask = example[1].to(device)
         labels = example[2].to(device)
 
-        outputs = model(
-            input_ids=input_ids, attention_mask=attention_mask, labels=labels
-        )
+        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
         logits = outputs.logits
 
         accs.append((logits.argmax(axis=-1) == labels).float().mean())
@@ -56,9 +54,7 @@ def create_tensor_dataset(dataset, encodings, distillation=False):
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
     tensors_ds = torch.utils.data.TensorDataset(*tensors)
     if distillation:
-        tensors.append(
-            torch.tensor([example["bert_last_hidden_state"] for example in dataset])
-        )
+        tensors.append(torch.tensor([example["bert_last_hidden_state"] for example in dataset]))
     return tensors_ds
 
 
@@ -74,9 +70,7 @@ def distillation_loss(features, target_features, mask=None):
     if mask is not None:
         features = features * mask.unsqueeze(-1)
         target_features = target_features * mask.unsqueeze(-1)
-    similarity = torch.nn.functional.cosine_similarity(
-        features, target_features, dim=-1
-    )
+    similarity = torch.nn.functional.cosine_similarity(features, target_features, dim=-1)
     loss = (1 - similarity.abs()) * mask
     # loss = (features - target_features).norm(dim=-1) # TODO(piyush) remove
 
@@ -155,9 +149,7 @@ def get_subnet_configs_beta(num_models, beta=0.95, base_hidden_size=768):
     base_config = {"num_hidden_layers": int(12 * m), "intermediate_size": int(3072 * m)}
     num_attention_heads = int(12 * m)
     valid_attention_heads = [a for a in range(1, 13) if base_hidden_size % a == 0]
-    num_attention_heads = min(
-        valid_attention_heads, key=lambda x: abs(x - num_attention_heads)
-    )
+    num_attention_heads = min(valid_attention_heads, key=lambda x: abs(x - num_attention_heads))
     base_config["num_attention_heads"] = num_attention_heads
     return [base_config.copy() for _ in range(num_models)]
 
@@ -182,13 +174,9 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
         print("Extracting subnetworks from pretrained BERT")
         if num_models == 1:
             print("Using pretrained BERT for single model")
-            models = [
-                BertForSequenceClassification.from_pretrained("bert-base-uncased")
-            ]
+            models = [BertForSequenceClassification.from_pretrained("bert-base-uncased")]
         else:
-            models = [
-                extract_subnetwork_from_bert(**configs[i]) for i in range(num_models)
-            ]
+            models = [extract_subnetwork_from_bert(**configs[i]) for i in range(num_models)]
     else:
         print("Creating models from scratch")
         models = []
@@ -252,24 +240,14 @@ def extract_subnetwork_from_bert(
     bert = model.bert
 
     # Randomly select layers.
-    if (
-        num_hidden_layers is not None
-        and num_hidden_layers != bert.config.num_hidden_layers
-    ):
-        layers = sorted(
-            random.sample(range(bert.config.num_hidden_layers), num_hidden_layers)
-        )
+    if num_hidden_layers is not None and num_hidden_layers != bert.config.num_hidden_layers:
+        layers = sorted(random.sample(range(bert.config.num_hidden_layers), num_hidden_layers))
         # layers = range(num_hidden_layers)
-        bert.encoder.layer = torch.nn.ModuleList(
-            [bert.encoder.layer[i] for i in layers]
-        )
+        bert.encoder.layer = torch.nn.ModuleList([bert.encoder.layer[i] for i in layers])
         bert.config.num_hidden_layers = num_hidden_layers
 
     # Randomly drop out neurons in fully connected layers.
-    if (
-        intermediate_size is not None
-        and intermediate_size != bert.config.intermediate_size
-    ):
+    if intermediate_size is not None and intermediate_size != bert.config.intermediate_size:
         output_neurons = sorted(
             random.sample(range(bert.config.intermediate_size), intermediate_size)
         )
@@ -285,14 +263,9 @@ def extract_subnetwork_from_bert(
         bert.config.intermediate_size = intermediate_size
 
     # Randomly drop out attention heads.
-    if (
-        num_attention_heads is not None
-        and num_attention_heads != bert.config.num_attention_heads
-    ):
+    if num_attention_heads is not None and num_attention_heads != bert.config.num_attention_heads:
         assert bert.config.hidden_size % num_attention_heads == 0
-        heads = sorted(
-            random.sample(range(bert.config.num_attention_heads), num_attention_heads)
-        )
+        heads = sorted(random.sample(range(bert.config.num_attention_heads), num_attention_heads))
         for i in range(len(bert.encoder.layer)):
             attention = bert.encoder.layer[i].attention
 
@@ -305,9 +278,7 @@ def extract_subnetwork_from_bert(
                     torch.cat(
                         [
                             matrix.weight[
-                                h
-                                * layer.attention_head_size : (h + 1)
-                                * layer.attention_head_size
+                                h * layer.attention_head_size : (h + 1) * layer.attention_head_size
                             ]
                             for h in heads
                         ]
@@ -317,9 +288,7 @@ def extract_subnetwork_from_bert(
                     torch.cat(
                         [
                             matrix.bias[
-                                h
-                                * layer.attention_head_size : (h + 1)
-                                * layer.attention_head_size
+                                h * layer.attention_head_size : (h + 1) * layer.attention_head_size
                             ]
                             for h in heads
                         ]
@@ -332,9 +301,7 @@ def extract_subnetwork_from_bert(
                     [
                         attention.output.dense.weight[
                             :,
-                            h
-                            * layer.attention_head_size : (h + 1)
-                            * layer.attention_head_size,
+                            h * layer.attention_head_size : (h + 1) * layer.attention_head_size,
                         ]
                         for h in heads
                     ],

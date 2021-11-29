@@ -66,9 +66,7 @@ def compute_vals(args):
             raise ValueError(f"Unknown model {ARGS.model}")
 
         n_params = sum([param.numel() for param in model.parameters()])
-        vals[
-            (hidden_size, num_hidden_layers, num_attention_heads, intermediate_size)
-        ] = n_params
+        vals[(hidden_size, num_hidden_layers, num_attention_heads, intermediate_size)] = n_params
 
         if i % ARGS.save_freq == 0:
             with open(filename, "wb") as f:
@@ -91,14 +89,10 @@ def main():
         grid = list(
             itertools.product(
                 *[
-                    [
-                        int(4096 * k / ARGS.n) for k in range(1, ARGS.n + 1)
-                    ],  # hidden_size
+                    [int(4096 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # hidden_size
                     range(1, 12 + 1),  # num_hidden_layers
                     range(1, 64 + 1),  # num_attention_heads
-                    [
-                        int(16384 * k / ARGS.n) for k in range(1, ARGS.n + 1)
-                    ],  # intermediate_size
+                    [int(16384 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # intermediate_size
                 ]
             )
         )
@@ -106,14 +100,10 @@ def main():
         grid = list(
             itertools.product(
                 *[
-                    [
-                        int(768 * k / ARGS.n) for k in range(1, ARGS.n + 1)
-                    ],  # hidden_size
+                    [int(768 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # hidden_size
                     range(1, 12 + 1),  # num_hidden_layers
                     range(1, 12 + 1),  # num_attention_heads
-                    [
-                        int(3072 * k / ARGS.n) for k in range(1, ARGS.n + 1)
-                    ],  # intermediate_size
+                    [int(3072 * k / ARGS.n) for k in range(1, ARGS.n + 1)],  # intermediate_size
                 ]
             )
         )

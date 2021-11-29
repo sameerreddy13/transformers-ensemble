@@ -39,9 +39,7 @@ def augment_sentences(ds, language, gpu="cuda:0"):
     )
     for entry in tqdm(ds):
         sentence = aug.augment(entry["sentence"])
-        augmented_sentences.append(
-            {"idx": idx, "label": entry["label"], "sentence": sentence}
-        )
+        augmented_sentences.append({"idx": idx, "label": entry["label"], "sentence": sentence})
         idx += 1
     return augmented_sentences
 
@@ -59,9 +57,7 @@ def combine_datasets():
     train_ds = list(ds["train"])
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
     encodings = create_encodings(dataset=train_ds, tokenizer=tokenizer, name=dataset)
-    tensors_ds = create_tensor_dataset(
-        dataset=train_ds, encodings=encodings, distillation=False
-    )
+    tensors_ds = create_tensor_dataset(dataset=train_ds, encodings=encodings, distillation=False)
     print(f"Original dataset has length {len(tensors_ds)}")
     for language in ["fr", "de", "es", "it"]:
         print(f"Loading augmented dataset for {language}")
@@ -111,12 +107,8 @@ def main(args):
     print(f"Augmenting {len(train_ds)} sentences using {args.language}")
     aug_ds = augment_sentences(train_ds, args.language, args.gpu)
     print(f"Augmentation complete -- Saving tensor dataset to disk")
-    encodings = create_encodings(
-        dataset=train_ds, tokenizer=tokenizer, name=args.dataset
-    )
-    tensors_ds = create_tensor_dataset(
-        dataset=train_ds, encodings=encodings, distillation=False
-    )
+    encodings = create_encodings(dataset=train_ds, tokenizer=tokenizer, name=args.dataset)
+    tensors_ds = create_tensor_dataset(dataset=train_ds, encodings=encodings, distillation=False)
     # Save the tensor dataset
     Path(args.save_dir).mkdir(parents=True, exist_ok=True)
     output_path = Path(f"{args.save_dir}/{args.dataset}_{args.language}.pt")

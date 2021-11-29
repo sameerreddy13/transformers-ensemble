@@ -37,9 +37,7 @@ def train(model, train_dataloader, val_dataloader, device):
             attention_mask = attention_mask.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
 
-            outputs = model(
-                input_ids=input_ids, attention_mask=attention_mask, labels=labels
-            )
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
             pbar.set_description(f"Loss = {loss.item()}")
 
@@ -87,9 +85,7 @@ def main():
         else:
             raise ValueError(f"Unknown dataset {name}")
 
-    model = transformers.BertForSequenceClassification.from_pretrained(
-        "bert-base-uncased"
-    )
+    model = transformers.BertForSequenceClassification.from_pretrained("bert-base-uncased")
     model = model.to(ARGS.device)
 
     if ARGS.store_logits:
@@ -117,26 +113,18 @@ def main():
     for key in ds:
         print(f"Running model on {key} dataset")
         for i in tqdm.tqdm(range(0, len(ds[key]), ARGS.batch_size)):
-            input_ids = encodings[key]["input_ids"][i : i + ARGS.batch_size].to(
+            input_ids = encodings[key]["input_ids"][i : i + ARGS.batch_size].to(ARGS.device)
+            attention_mask = encodings[key]["attention_mask"][i : i + ARGS.batch_size].to(
                 ARGS.device
             )
-            attention_mask = encodings[key]["attention_mask"][
-                i : i + ARGS.batch_size
-            ].to(ARGS.device)
             if ARGS.store_logits:
-                logits = model(
-                    input_ids=input_ids, attention_mask=attention_mask
-                ).logits
+                logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
                 logits = logits.cpu().detach().numpy()
                 for j in range(len(logits)):
                     new_ds[key].append({**ds[key][i + j], "bert_logits": logits[j]})
             else:
-                features_dict = model.bert(
-                    input_ids=input_ids, attention_mask=attention_mask
-                )
-                last_hidden_state = (
-                    features_dict["last_hidden_state"].cpu().detach().numpy()
-                )
+                features_dict = model.bert(input_ids=input_ids, attention_mask=attention_mask)
+                last_hidden_state = features_dict["last_hidden_state"].cpu().detach().numpy()
                 pooler_output = features_dict["pooler_output"].cpu().detach().numpy()
                 for j in range(len(last_hidden_state)):
                     new_ds[key].append(

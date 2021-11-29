@@ -17,27 +17,19 @@ def parse_args():
     default_help = "(default: %(default)s)"
     ap.add_argument("--save-dir", type=str, default="checkpoints", help=default_help)
     ap.add_argument("--gpus", nargs="+", default=list(range(8)), help=default_help)
-    ap.add_argument(
-        "--seq-per-gpu", action="store_true", default=False, help=default_help
-    )
+    ap.add_argument("--seq-per-gpu", action="store_true", default=False, help=default_help)
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
     ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
     ap.add_argument("--augmented", choices=("True", "False"))
-    ap.add_argument(
-        "--extract-subnetwork", action="store_true", default=False, help=default_help
-    )
-    ap.add_argument(
-        "--architecture-selection", type=str, default="fixed", help=default_help
-    )
+    ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
+    ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
     ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
     ap.add_argument("--batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
     ap.add_argument("--limit", type=int, default=-1, help=default_help)
-    ap.add_argument(
-        "-wd", "--weight-decay", type=float, default=0.01, help=default_help
-    )
+    ap.add_argument("-wd", "--weight-decay", type=float, default=0.01, help=default_help)
     ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
 
     return ap.parse_args()
@@ -87,10 +79,7 @@ def train_one_epoch(
             scheduler.step()
 
         if i % print_freq == 0:
-            print(
-                f"{prefix} Step {i + 1} of {len(train_dataloader)}: "
-                f"loss = {loss.item()}"
-            )
+            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: " f"loss = {loss.item()}")
             train_losses[i] = loss.item()
 
     model = model.eval()
@@ -141,9 +130,7 @@ def train(
     print(f"{prefix} Moved model to device {device}")
 
     metrics = {}
-    optimizer = torch.optim.SGD(
-        model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay
-    )
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=weight_decay)
     scheduler = None
     if warmup_steps != 0:
         scheduler = transformers.get_linear_schedule_with_warmup(
