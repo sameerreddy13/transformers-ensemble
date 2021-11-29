@@ -93,6 +93,7 @@ def main(args):
         gpu = ["cpu"]
     else:
         print(f"Using GPU: {args.gpu}")
+        gpu = args.gpu
 
     print(
         f"Augmenting the training split from dataset: {args.dataset}"
@@ -105,7 +106,7 @@ def main(args):
 
     train_ds = list(ds["train"])[: args.limit]
     print(f"Augmenting {len(train_ds)} sentences using {args.language}")
-    aug_ds = augment_sentences(train_ds, args.language, args.gpu)
+    aug_ds = augment_sentences(train_ds, args.language, gpu)
     print(f"Augmentation complete -- Saving tensor dataset to disk")
     encodings = create_encodings(dataset=train_ds, tokenizer=tokenizer, name=args.dataset)
     tensors_ds = create_tensor_dataset(dataset=train_ds, encodings=encodings, distillation=False)
