@@ -16,6 +16,7 @@ def parse_args():
     ap = argparse.ArgumentParser()
     default_help = "(default: %(default)s)"
     ap.add_argument("--save-dir", type=str, default="checkpoints", help=default_help)
+    ap.add_argument("--save-all-epochs", action="store_true", default=False, help=default_help)
     ap.add_argument("--gpus", nargs="+", default=list(range(8)), help=default_help)
     ap.add_argument("--seq-per-gpu", action="store_true", default=False, help=default_help)
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
@@ -41,7 +42,6 @@ def train_one_epoch(
     val_dataloader,
     optimizer,
     device,
-    save_path,
     scheduler=None,
     distillation=False,
     print_freq=50,
@@ -94,9 +94,6 @@ def train_one_epoch(
     print(f"{prefix} Train accuracy: {metrics['train_acc']}")
     print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
 
-    torch.save(metrics, save_path)
-    print(f"{prefix} Saved model checkpoint to {save_path}")
-
     return metrics
 
 
@@ -121,6 +118,7 @@ def train(
     warmup_steps=0,
     num_epochs=100,
     print_freq=50,
+    save_all=False,
 ):
     prefix = f"[Process {task_id}]"
     os.makedirs(save_dir, exist_ok=True)
@@ -138,6 +136,8 @@ def train(
             num_warmup_steps=warmup_steps,
             num_training_steps=len(train_dataloader) * num_epochs,
         )
+
+    prev_val_acc = - float("inf")
     for epoch in range(num_epochs):
         epoch_metrics = train_one_epoch(
             model,
@@ -147,11 +147,16 @@ def train(
             device,
             scheduler=scheduler,
             distillation=distillation,
-            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"),
             print_freq=print_freq,
             prefix=f"{prefix} [Epoch {epoch}]",
         )
         metrics[epoch] = epoch_metrics
+
+        if save_all or epoch_metrics["val_acc"] >= prev_val_acc:
+            save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
+            torch.save(metrics, save_path)
+            print(f"{prefix} Saved model checkpoint to {save_path}")
+        prev_val_acc = max(epoch_metrics["val_acc"], prev_val_acc)
 
     return metrics
 
@@ -175,6 +180,8 @@ def train_share_gpu(jobs):
         for job in jobs
     ]
     # TODO - support scheduler
+
+    prev_val_accs = [- float("inf") for _ in range(len(jobs))]
     metrics = [{} for _ in range(len(jobs))]
     for epoch in range(num_epochs):
         for i, job in enumerate(jobs):
@@ -275,6 +282,7 @@ def main(args):
             "distillation": args.distillation_dataset is not None,
             "weight_decay": args.weight_decay,
             "warmup_steps": args.warmup_steps,
+            "save_all": args.save_all_epochs,
         }
         for i in range(args.num_models)
     ]
