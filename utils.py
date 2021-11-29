@@ -176,11 +176,10 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
             # Use extract subnetwork method to adjust attention heads
             num_attention_heads = cfg.pop("num_attention_heads")
             models.append(
-                # extract_subnetwork_from_bert(
-                    # pretrained=get_naive_model(**cfg),
-                    # num_attention_heads=num_attention_heads
-                # )
-                get_naive_model(**cfg)
+                extract_subnetwork_from_bert(
+                    pretrained=get_naive_model(**cfg),
+                    num_attention_heads=num_attention_heads
+                )
             )
     return models
 

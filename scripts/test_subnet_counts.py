@@ -24,6 +24,7 @@ def show_models(subnet_beta=False, subnet_fixed=False):
 		param_ratio, total_ratio = utils.get_param_ratios(n_params, num_models)
 		config['param_ratio'] = param_ratio
 		config['total_ratio'] = total_ratio
+		config['params_per_model'] = f"{n_params/1e6} million"
 		results.append(config)	
 	pprint.pp(list(zip(utils.ENSEMBLE_COUNTS, results)))
 
