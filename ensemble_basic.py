@@ -3,12 +3,14 @@ import concurrent.futures
 import os
 import pickle
 import random
+from pathlib import Path
 
 import datasets
 import torch
 import transformers
 
 import utils
+
 
 def parse_args():
     ap = argparse.ArgumentParser()
@@ -19,6 +21,7 @@ def parse_args():
     ap.add_argument("--num-models", type=int, default=8, help=default_help)
     ap.add_argument("--dataset", type=str, default="sst2", help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
+    ap.add_argument("--augmented", action="store_true", default=False)
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
     ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
@@ -52,14 +55,21 @@ def train_one_epoch(
         attention_mask = example[1].to(device)
         labels = example[2].to(device)
 
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
-                        output_hidden_states=True)
+        outputs = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            labels=labels,
+            output_hidden_states=True,
+        )
         loss = outputs.loss
 
         if distillation:
             bert_last_hidden_state = example[3].to(device)
             distill_loss = utils.distillation_loss(
-                outputs["hidden_states"][-1], bert_last_hidden_state, mask=attention_mask)
+                outputs["hidden_states"][-1],
+                bert_last_hidden_state,
+                mask=attention_mask,
+            )
             loss = loss + distill_loss
 
         optimizer.zero_grad()
@@ -69,8 +79,7 @@ def train_one_epoch(
             scheduler.step()
 
         if i % print_freq == 0:
-            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: "
-                  f"loss = {loss.item()}")
+            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: " f"loss = {loss.item()}")
             train_losses[i] = loss.item()
 
     model = model.eval()
@@ -85,7 +94,7 @@ def train_one_epoch(
     print(f"{prefix} Train accuracy: {metrics['train_acc']}")
     print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
 
-    torch.save(metrics, save_path) 
+    torch.save(metrics, save_path)
     print(f"{prefix} Saved model checkpoint to {save_path}")
 
     return metrics
@@ -98,6 +107,7 @@ def train_wrapper(kwargs):
     """
     return train(**kwargs)
 
+
 def train(
     task_id,
     model,
@@ -106,11 +116,11 @@ def train(
     device,
     save_dir,
     lr=1e-5,
-    weight_decay=0.,
+    weight_decay=0.0,
     distillation=False,
     warmup_steps=0,
     num_epochs=100,
-    print_freq=50
+    print_freq=50,
 ):
     prefix = f"[Process {task_id}]"
     os.makedirs(save_dir, exist_ok=True)
@@ -125,19 +135,26 @@ def train(
     if warmup_steps != 0:
         scheduler = transformers.get_linear_schedule_with_warmup(
             optimizer,
-            num_warmup_steps = warmup_steps,
-            num_training_steps = len(train_dataloader) * num_epochs
+            num_warmup_steps=warmup_steps,
+            num_training_steps=len(train_dataloader) * num_epochs,
         )
     for epoch in range(num_epochs):
         epoch_metrics = train_one_epoch(
-            model, train_dataloader, val_dataloader, optimizer, device,
-            scheduler=scheduler, distillation=distillation,
-            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"), 
-            print_freq=print_freq, prefix=f"{prefix} [Epoch {epoch}]"
+            model,
+            train_dataloader,
+            val_dataloader,
+            optimizer,
+            device,
+            scheduler=scheduler,
+            distillation=distillation,
+            save_path=os.path.join(save_dir, f"model_epoch{epoch}.pt"),
+            print_freq=print_freq,
+            prefix=f"{prefix} [Epoch {epoch}]",
         )
         metrics[epoch] = epoch_metrics
 
     return metrics
+
 
 def train_share_gpu(jobs):
     prefix = f"[Process {jobs[0]['task_id']}]"
@@ -149,7 +166,12 @@ def train_share_gpu(jobs):
     device = jobs[0]["device"]
     num_epochs = jobs[0]["num_epochs"]
     optimizers = [
-        torch.optim.SGD(job["model"].parameters(), lr=job["lr"], momentum=0.9, weight_decay=job['weight_decay'])
+        torch.optim.SGD(
+            job["model"].parameters(),
+            lr=job["lr"],
+            momentum=0.9,
+            weight_decay=job["weight_decay"],
+        )
         for job in jobs
     ]
     # TODO - support scheduler
@@ -163,12 +185,19 @@ def train_share_gpu(jobs):
             print(f"{job_prefix} Moved model to device {device}")
 
             epoch_metrics = train_one_epoch(
-                model, job["train_dataloader"], job["val_dataloader"], optimizers[i], device,
+                model,
+                job["train_dataloader"],
+                job["val_dataloader"],
+                optimizers[i],
+                device,
                 save_path=os.path.join(job["save_dir"], f"model_epoch{epoch}.pt"),
-                distillation=job["distillation"], prefix=f"{job_prefix} [Epoch {epoch}]")
+                distillation=job["distillation"],
+                prefix=f"{job_prefix} [Epoch {epoch}]",
+            )
             metrics[i][epoch] = epoch_metrics
 
     return metrics
+
 
 def main(args):
     print(f"Save dir: {args.save_dir}")
@@ -184,32 +213,53 @@ def main(args):
     if "TOKENIZERS_PARALLELISM" not in os.environ:
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
-    if args.distillation_dataset is not None:
-        with open(args.distillation_dataset, "rb") as f:
-            ds = pickle.load(f)
-        print(f"Loaded distillation dataset from {args.distillation_dataset}")
-    else:
-        ds = datasets.load_dataset("glue", args.dataset)
 
-    train_ds = list(ds["train"])[:args.limit]
-    random.shuffle(train_ds)
-    partition_size = len(train_ds) // args.num_models + 1
-    train_dataloaders = [
-        utils.create_dataloader(
-            train_ds[i : i + partition_size], tokenizer, args.batch_size, args.dataset,
-            distillation=args.distillation_dataset is not None)
-        for i in range(0, len(train_ds), partition_size)
-    ]
-    print(f"Partitioned {len(train_ds)} total training samples")
-    val_dataloader = utils.create_dataloader(
-        ds['validation'], tokenizer, args.val_batch_size, args.dataset)
+    if args.augmented:
+        aug_ds_path = Path(f"data/augmented_train_ds/{args.dataset}_augmented.pt")
+        tensors_ds = list(torch.load(aug_ds_path))[: args.limit]
+        partition_size = len(tensors_ds) // args.num_models + 1
+        train_dataloaders = [
+            torch.utils.data.DataLoader(
+                tensors_ds[i : i + partition_size], batch_size=args.batch_size
+            )
+            for i in range(0, len(tensors_ds), partition_size)
+        ]
+        print(f"Partitioned {len(tensors_ds)} total training samples")
+        ds = datasets.load_dataset("glue", args.dataset)
+        val_dataloader = utils.create_dataloader(
+            ds["validation"], tokenizer, args.val_batch_size, args.dataset
+        )
+    else:
+        if args.distillation_dataset is not None:
+            with open(args.distillation_dataset, "rb") as f:
+                ds = pickle.load(f)
+            print(f"Loaded distillation dataset from {args.distillation_dataset}")
+        else:
+            ds = datasets.load_dataset("glue", args.dataset)
+        train_ds = list(ds["train"])[: args.limit]
+        random.shuffle(train_ds)
+        partition_size = len(train_ds) // args.num_models + 1
+        train_dataloaders = [
+            utils.create_dataloader(
+                train_ds[i : i + partition_size],
+                tokenizer,
+                args.batch_size,
+                args.dataset,
+                distillation=args.distillation_dataset is not None,
+            )
+            for i in range(0, len(train_ds), partition_size)
+        ]
+        print(f"Partitioned {len(train_ds)} total training samples")
+        val_dataloader = utils.create_dataloader(
+            ds["validation"], tokenizer, args.val_batch_size, args.dataset
+        )
 
     # Build models (and check param counts).
     models = utils.build_models(
-        num_models=args.num_models, 
+        num_models=args.num_models,
         extract_subnetwork=args.extract_subnetwork,
-        architecture_selection=args.architecture_selection
-    )  
+        architecture_selection=args.architecture_selection,
+    )
     utils.check_param_counts(models)
     # Setup jobs.
     jobs = [
@@ -223,13 +273,13 @@ def main(args):
             "num_epochs": args.num_epochs,
             "save_dir": os.path.join(args.save_dir, str(i)),
             "distillation": args.distillation_dataset is not None,
-            'weight_decay': args.weight_decay,
-            'warmup_steps': args.warmup_steps
+            "weight_decay": args.weight_decay,
+            "warmup_steps": args.warmup_steps,
         }
         for i in range(args.num_models)
     ]
     # Fixes too many open files error. (See https://github.com/pytorch/pytorch/issues/11201)
-    torch.multiprocessing.set_sharing_strategy('file_system') 
+    torch.multiprocessing.set_sharing_strategy("file_system")
     # Train.
     if args.num_models == 1:
         metrics = train(**jobs[0])
@@ -248,6 +298,7 @@ def main(args):
     with open(metrics_save_path, "wb") as f:
         pickle.dump(metrics_save_path, f)
     print(f"Done. Saved all metrics to: {metrics_save_path}")
+
 
 if __name__ == "__main__":
     main(parse_args())
