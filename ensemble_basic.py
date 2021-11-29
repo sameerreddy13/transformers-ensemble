@@ -214,9 +214,7 @@ def main(args):
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
 
-    augmented = args.augmented == "True"
-    print(f"Using augmented data? : {augmented}")
-    if augmented:
+    if args.augmented:
         aug_ds_path = Path(f"data/augmented_train_ds/{args.dataset}_augmented.pt")
         tensors_ds = list(torch.load(aug_ds_path))[: args.limit]
         partition_size = len(tensors_ds) // args.num_models + 1
