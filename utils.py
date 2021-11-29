@@ -198,8 +198,6 @@ def load_model_checkpoint(checkpoint_path, naive=False):
     checkpoint = torch.load(checkpoint_path)
     config = checkpoint['arch']
     if naive:
-        if '11-27' in str(checkpoint_path): 
-            del config['num_attention_heads']
         model = get_naive_model(**config)
     else:
         model = extract_subnetwork_from_bert(**config)

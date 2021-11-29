@@ -35,7 +35,7 @@ def parse_args():
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
     ap.add_argument("-wd", "--weight-decay", type=float, default=0.0, help=default_help)
-    ap.add_argument("--warmup-steps", type=int, default=1000, help=default_help)
+    ap.add_argument("--warmup-steps", type=int, default=0, help=default_help)
 
     return ap.parse_args()
 
@@ -162,7 +162,7 @@ def train(
 
         if save_all or epoch_metrics["val_acc"] >= prev_val_acc:
             save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
-            torch.save(metrics, save_path)
+            torch.save(epoch_metrics, save_path)
             print(f"{prefix} Saved model checkpoint to {save_path}")
         prev_val_acc = max(epoch_metrics["val_acc"], prev_val_acc)
 
@@ -217,7 +217,7 @@ def train_share_gpu(jobs):
 
             if job["save_all"] or epoch_metrics["val_acc"] >= prev_val_accs[i]:
                 save_path = os.path.join(save_dir, f"model_epoch{epoch}.pt")
-                torch.save(metrics, save_path)
+                torch.save(epoch_metrics, save_path)
                 print(f"{prefix} Saved model checkpoint to {save_path}")
             prev_val_accs[i] = max(epoch_metrics["val_acc"], prev_val_accs[i])
 
