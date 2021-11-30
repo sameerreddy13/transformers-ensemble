@@ -66,7 +66,7 @@ def train_one_epoch(
             labels=labels,
             output_hidden_states=True,
         )
-        loss = outputs.loss
+        cls_loss = outputs.loss
 
         if distillation:
             bert_last_hidden_state = example[3].to(device)
@@ -75,7 +75,9 @@ def train_one_epoch(
                 bert_last_hidden_state,
                 mask=attention_mask,
             )
-            loss = loss + distill_loss
+            loss = cls_loss + distill_loss
+        else:
+            loss = cls_loss
 
         optimizer.zero_grad()
         loss.backward()
@@ -84,7 +86,12 @@ def train_one_epoch(
             scheduler.step()
 
         if i % print_freq == 0:
-            print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: " f"loss = {loss.item()}")
+            if distillation:
+                print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: cls loss = "
+                      f"{cls_loss.item()}, distill loss = {distill_loss.item()}, total loss = "
+                      f"{loss.item()}")
+            else:
+                print(f"{prefix} Step {i + 1} of {len(train_dataloader)}: loss = {loss.item()}")
             train_losses[i] = loss.item()
 
     model = model.eval()
