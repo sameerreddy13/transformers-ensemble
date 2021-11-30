@@ -12,10 +12,18 @@ def parse_args():
     ap.add_argument("--device", default="cuda")
     return ap.parse_args()
 
-def get_epoch_metrics(model_dir, key):
+def get_epoch_num(checkpoint_path):
+    return int(checkpoint_path.name.split('epoch')[-1][:-3])
+
+def get_epoch_metrics(model_dir):
     p = (Path('.') / model_dir).glob('*.pt')
-    get_epoch_num = lambda x: int(x.name.split('epoch')[-1][:-3])
     return [(x, torch.load(x, map_location='cpu')[key]) for x in sorted(p, key=get_epoch_num)]
+
+def get_last_epoch(model_dir):
+    p = (Path('.') / model_dir).glob('*.pt')
+    last_epoch = max(p, key=get_epoch_num)
+    return torch.load(last_epoch, map_location='cpu')
+
 
 def average_vote(models, input_ids, attention_mask, labels):
     '''
@@ -42,13 +50,15 @@ def main(args):
     models = []
     accuracies = []
     # Choose checkpoints for ensemble
-    for dir in model_dirs:
-        val_accs = get_epoch_metrics(dir, 'val_acc')
-        chk_path, val_acc = max(val_accs, key=lambda x: x[1])
-        print(chk_path, val_acc)
-        models.append(utils.load_model_checkpoint(chk_path, naive=is_naive))
-        accuracies.append(val_acc)
-    print(f"Mean accuracy = {sum(accuracies) /  len(accuracies)}")
+    for i, dir in enumerate(model_dirs):
+        print(f"Getting best checkpoint for model {i}")
+        # val_accs = get_epoch_metrics(dir, 'val_acc')
+        # chk_path, val_acc = max(val_accs, key=lambda x: x[1])
+        checkpoint = get_last_epoch(dir)
+        accuracies.append(checkpoint['val_acc'])
+        models.append(utils.load_model_checkpoint(checkpoint, naive=is_naive))
+
+    print(f"Mean val accuracy = {sum(accuracies) /  len(accuracies)}")
 
     # Load validation data
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
@@ -68,7 +78,7 @@ def main(args):
             labels
         )
         accs.append(acc)
-    print("Ensemble voting validation accuracy:", sum(accs) / len(accs))
+    print("Ensemble voting val accuracy:", sum(accs) / len(accs))
 
 if __name__ == '__main__':
     main(parse_args())

@@ -2,8 +2,8 @@ if [ $# -eq 0 ]; then
 	echo "Must specify num models"
 	exit 1
 fi
-SAVE_DIR="logs/11-27/naive_$1models_lr1e-3_bs32_warmup1000_wd1e-2"
-CMD="python ensemble_basic.py --num-models $1 -wd 1e-2 --save-dir $SAVE_DIR"
+SAVE_DIR="logs/11-29/subnet_$1models_lr1e-3_bs8_warmup1000"
+CMD="python ensemble_basic.py --extract-subnetwork --num-models $1 --batch-size 8 -wd 0. --lr 1e-3 --num-epochs 200 --warmup 1000 --save-dir $SAVE_DIR"
 LOG_FILE="$SAVE_DIR/log.txt"
 mkdir -p $SAVE_DIR
 touch $LOG_FILE && echo "Created $LOG_FILE"

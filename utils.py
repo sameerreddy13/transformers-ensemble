@@ -194,14 +194,13 @@ def build_models(num_models, extract_subnetwork=False, architecture_selection="f
         ]
     return models, configs
 
-def load_model_checkpoint(checkpoint_path, naive=False):
-    checkpoint = torch.load(checkpoint_path)
-    config = checkpoint['arch']
+def load_model_checkpoint(checkpoint_data, naive=False):
+    config = checkpoint_data['arch']
     if naive:
         model = get_naive_model(**config)
     else:
         model = extract_subnetwork_from_bert(**config)
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint_data['model_state_dict'])
     return model    
 
 def extract_subnetwork_from_bert(
