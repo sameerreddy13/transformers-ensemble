@@ -30,7 +30,7 @@ def parse_args():
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
 
-    ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
+    ap.add_argument("--num-epochs", type=int, default=20, help=default_help)
     ap.add_argument("--batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
