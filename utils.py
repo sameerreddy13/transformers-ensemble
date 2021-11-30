@@ -54,7 +54,9 @@ def create_tensor_dataset(dataset, encodings, distillation=False):
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
     tensors_ds = torch.utils.data.TensorDataset(*tensors)
     if distillation:
-        tensors.append(torch.tensor([example["bert_last_hidden_state"] for example in dataset]))
+        tensors.append(torch.tensor(np.array([
+            example["bert_last_hidden_state"] for example in dataset
+        ])))
     return tensors_ds
 
 
