@@ -52,17 +52,18 @@ def create_encodings(dataset, tokenizer, name):
 def create_tensor_dataset(dataset, encodings, distillation=False):
     labels = torch.tensor([example["label"] for example in dataset])
     tensors = [encodings["input_ids"], encodings["attention_mask"], labels]
-    tensors_ds = torch.utils.data.TensorDataset(*tensors)
     if distillation:
+        print("Adding pretrained BERT's final hidden state to dataset labels")
         tensors.append(torch.tensor(np.array([
             example["bert_last_hidden_state"] for example in dataset
         ])))
+    tensors_ds = torch.utils.data.TensorDataset(*tensors)
     return tensors_ds
 
 
 def create_dataloader(dataset, tokenizer, batch_size, name, distillation=False):
     encodings = create_encodings(dataset, tokenizer, name)
-    tensors_ds = create_tensor_dataset(dataset, encodings, distillation)
+    tensors_ds = create_tensor_dataset(dataset, encodings, distillation=distillation)
     dataloader = torch.utils.data.DataLoader(tensors_ds, batch_size=batch_size)
     return dataloader
 
