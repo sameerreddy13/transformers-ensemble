@@ -30,7 +30,7 @@ def parse_args():
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
 
-    ap.add_argument("--num-epochs", type=int, default=20, help=default_help)
+    ap.add_argument("--num-epochs", type=int, default=50, help=default_help)
     ap.add_argument("--batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--val-batch-size", type=int, default=32, help=default_help)
     ap.add_argument("--lr", type=float, default=1e-3, help=default_help)
@@ -225,6 +225,7 @@ def train_share_gpu(jobs):
 
 
 def main(args):
+
     print(f"Save dir: {args.save_dir}")
 
     # Determine devices
@@ -265,7 +266,7 @@ def main(args):
             ds = datasets.load_dataset("glue", args.dataset)
         train_ds = list(ds["train"])[: args.limit]
         random.shuffle(train_ds)
-        partition_size = len(train_ds) // args.num_models + 1
+        partition_size = len(train_ds) // args.num_models
         train_dataloaders = [
             utils.create_dataloader(
                 train_ds[i : i + partition_size],
@@ -280,7 +281,6 @@ def main(args):
         val_dataloader = utils.create_dataloader(
             ds["validation"], tokenizer, args.val_batch_size, args.dataset
         )
-
     # Build models (and check param counts).
     models, configs = utils.build_models(
         num_models=args.num_models,
@@ -288,7 +288,6 @@ def main(args):
         architecture_selection=args.architecture_selection,
     )
     utils.check_param_counts(models)
-
     # Setup jobs.
     jobs = [
         {
