@@ -309,9 +309,6 @@ def main(args):
         for i in range(args.num_models)
     ]
 
-    # Fixes too many open files error. (See https://github.com/pytorch/pytorch/issues/11201)
-    torch.multiprocessing.set_sharing_strategy("file_system")
-
     # Train.
     if args.num_models == 1:
         metrics = train(**jobs[0])
@@ -334,4 +331,10 @@ def main(args):
 
 
 if __name__ == "__main__":
+    # Force exec() after fork() to prevent deadlocks.
+    torch.multiprocessing.set_start_method("spawn", force=True)
+
+    # Fixes too many open files error. (See https://github.com/pytorch/pytorch/issues/11201)
+    torch.multiprocessing.set_sharing_strategy("file_system")
+
     main(parse_args())
