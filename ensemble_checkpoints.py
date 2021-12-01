@@ -1,19 +1,27 @@
-import torch
 import argparse
+import tqdm
 from pathlib import Path
-import transformers
-import utils
+
 import datasets
+import transformers
+import torch
+
+import utils
 import model_ensemble
+
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp-dir", help="Path to set of models for one experiment", required=True)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--val-batch-size", type=int, default=128)
+    ap.add_argument("--num-epochs", type=int, default=1)
     ap.add_argument("--batch-size", type=int, default=128)
     ap.add_argument("--device", type=str, default="cuda")
-    ap.add_argument("--limit", type=str, default=32) # TODO: Set to 1 for now, since we only support average voting which doesnt require training dataq
-    ap.add_argument("--average-vote", action="store_true", default=True)
+    ap.add_argument("--limit", type=int, default=-1)
+    ap.add_argument("--average-vote", action="store_true", default=False)
+    ap.add_argument("--weighted-vote", action="store_true", default=False)
+    ap.add_argument("--dynamic-weighting", action="store_true", default=False)
     return ap.parse_args()
 
 def get_epoch_num(checkpoint_path):
@@ -53,33 +61,38 @@ def main(args):
         checkpoint = get_last_epoch(dir)
         indiv_accs.append(checkpoint['val_acc'])
         models.append(utils.load_model_checkpoint(checkpoint, naive=is_naive))
+    print(f"Mean val accuracy (individual) = {sum(indiv_accs) /  len(indiv_accs)}")
 
-    # Load validation data
+    # Load data.
+    print("Loading data")
     tokenizer = transformers.BertTokenizer.from_pretrained("bert-base-uncased")
     ds = datasets.load_dataset("glue", args.dataset)
     train_dataloader = utils.create_dataloader(
-        list(ds["train"])[:args.limit], tokenizer, args.batch_size, args.dataset
+        list(ds['train'])[:args.limit], tokenizer, args.batch_size, args.dataset
     )
     val_dataloader = utils.create_dataloader(
         ds["validation"], tokenizer, args.val_batch_size, args.dataset
     )
-    print(
-        "Train size =", args.limit,
-        ", Val size =", ds["validation"].num_rows,
-        ", Test size =", ds['test'].num_rows
-    )
-    print(f"Mean val accuracy (individual) = {sum(indiv_accs) /  len(indiv_accs)}")
-    # Fit ensemble
+
+    # Fit ensemble.
+    print("Fitting")
     [model.eval() for model in models]
     if args.average_vote:
         ensemble = model_ensemble.AverageVote(models, device)
+    elif args.weighted_vote:
+        ensemble = model_ensemble.WeightedVote(models, device)
+    elif args.dynamic_weighting:
+        ensemble = model_ensemble.DynamicWeightedVote(models, device)
     else:
         raise ValueError("No ensemble strategy provided")
-    ensemble.fit(train_dataloader)
+    ensemble.fit(train_dataloader, num_epochs=args.num_epochs)
+
     # Eval ensemble
-    _, val_accs = ensemble.predict(val_dataloader)
-    _, train_accs = ensemble.predict(train_dataloader)
-    get_acc = lambda x: round((sum(x) / len(x)).item(), 4)
+    print("Computing train and validation accuracies")
+    train_accs = ensemble.predict(tqdm.tqdm(train_dataloader))
+    val_accs = ensemble.predict(tqdm.tqdm(val_dataloader))
+
+    get_acc = lambda x: round((sum(x) / len(x)), 4)
     print("Ensemble voting train accuracy:", get_acc(train_accs))
     print("Ensemble voting val accuracy:", get_acc(val_accs))
 
