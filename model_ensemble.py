@@ -93,3 +93,57 @@ class WeightedVote(Ensemble):
         acc = (probs.argmax(dim=-1) == example[2]).float().mean().item()
 
         return probs, acc
+
+
+class DynamicWeightedVote(Ensemble):
+    '''
+    Voting with learned weights per model, where the weights depend on the data point.
+    '''
+    def __init__(self, models, device, input_dim=128, hidden_dim=200, num_hidden_layers=2):
+        super().__init__(models, device)
+
+        layers = [
+            torch.nn.Linear(input_dim, hidden_dim),
+            torch.nn.ReLU(),
+        ]
+        for _ in range(num_hidden_layers):
+            layers.extend([
+                torch.nn.Linear(hidden_dim, hidden_dim),
+                torch.nn.ReLU(),
+            ])
+        layers.append(torch.nn.Linear(hidden_dim, len(models)))
+
+        self.mlp = torch.nn.Sequential(*layers).to(device)
+
+    def fit(self, dataloader, num_epochs=1, lr=1e-2, print_freq=25):
+        optimizer = torch.optim.SGD(self.mlp.parameters(), lr=lr)
+        accs = []
+        for epoch in range(num_epochs):
+            for i, example in enumerate(dataloader):
+                example = [x.to(self.device) for x in example]
+                probs, acc = self.predict_batch(example)
+                loss = F.cross_entropy(input=probs, target=example[2])
+                accs.append(acc)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                if i % print_freq == 0:
+                    acc, accs = sum(accs) / len(accs), []
+                    _, voting_acc = AverageVote.average_vote(self.models, *example)
+                    print(f"[Epoch {epoch}] [{i}/{len(dataloader)}] Average accuracy so far: "
+                          f"{acc} (baseline voting accuracy: {voting_acc}, loss = {loss.item()})")
+
+    def predict_batch(self, example):
+        example = [x.to(self.device) for x in example]
+        logits = torch.stack([  # Shape: (batch_size, num_models, num_labels)
+            model(input_ids=example[0], attention_mask=example[1]).logits
+            for model in self.models
+        ]).permute(1, 0, 2)
+        w = self.mlp(example[0].float())  # Shape: (batch_size, num_models)
+
+        probs = (logits * w.unsqueeze(-1)).sum(dim=1).softmax(dim=-1)
+        acc = (probs.argmax(dim=-1) == example[2]).float().mean().item()
+
+        return probs, acc

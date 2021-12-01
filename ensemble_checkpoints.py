@@ -21,6 +21,7 @@ def parse_args():
     ap.add_argument("--limit", type=int, default=-1)
     ap.add_argument("--average-vote", action="store_true", default=False)
     ap.add_argument("--weighted-vote", action="store_true", default=False)
+    ap.add_argument("--dynamic-weighting", action="store_true", default=False)
     return ap.parse_args()
 
 def get_epoch_num(checkpoint_path):
@@ -80,6 +81,8 @@ def main(args):
         ensemble = model_ensemble.AverageVote(models, device)
     elif args.weighted_vote:
         ensemble = model_ensemble.WeightedVote(models, device)
+    elif args.dynamic_weighting:
+        ensemble = model_ensemble.DynamicWeightedVote(models, device)
     else:
         raise ValueError("No ensemble strategy provided")
     ensemble.fit(train_dataloader, num_epochs=args.num_epochs)
