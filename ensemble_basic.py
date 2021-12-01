@@ -1,5 +1,6 @@
 import argparse
 import concurrent.futures
+import datetime
 import os
 import pickle
 import random
@@ -104,8 +105,8 @@ def train_one_epoch(
         "train_losses": train_losses,
         "arch": arch,
     }
-    print(f"{prefix} Train accuracy: {metrics['train_acc']}")
-    print(f"{prefix} Validation accuracy: {metrics['val_acc']}")
+    print(f"{prefix} [{datetime.datetime.now()}] Train accuracy: {metrics['train_acc']}")
+    print(f"{prefix} [{datetime.datetime.now()}] Validation accuracy: {metrics['val_acc']}")
 
     return metrics
 
@@ -151,6 +152,7 @@ def train(
             num_training_steps=len(train_dataloader) * num_epochs,
         )
 
+    print(f"[{datetime.datetime.now()}] Starting training")
     prev_val_acc = - float("inf")
     for epoch in range(num_epochs):
         epoch_metrics = train_one_epoch(
@@ -232,7 +234,6 @@ def train_share_gpu(jobs):
 
 
 def main(args):
-
     print(f"Save dir: {args.save_dir}")
 
     # Determine devices
