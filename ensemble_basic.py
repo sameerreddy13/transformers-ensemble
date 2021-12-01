@@ -26,6 +26,7 @@ def parse_args():
     ap.add_argument("--limit", type=int, default=-1, help=default_help)
     ap.add_argument("--distillation-dataset", type=str, default=None, help=default_help)
     ap.add_argument("--augmented", action="store_true", default=False, help=default_help)
+    ap.add_argument("--bagging", action="store_true", default=False, help=default_help)
 
     ap.add_argument("--extract-subnetwork", action="store_true", default=False, help=default_help)
     ap.add_argument("--architecture-selection", type=str, default="fixed", help=default_help)
@@ -271,23 +272,42 @@ def main(args):
             print(f"Loaded distillation dataset from {args.distillation_dataset}")
         else:
             ds = datasets.load_dataset("glue", args.dataset)
+
         train_ds = list(ds["train"])[: args.limit]
         random.shuffle(train_ds)
-        partition_size = len(train_ds) // args.num_models
-        train_dataloaders = [
-            utils.create_dataloader(
-                train_ds[i : i + partition_size],
-                tokenizer,
-                args.batch_size,
-                args.dataset,
-                distillation=args.distillation_dataset is not None,
-            )
-            for i in range(0, len(train_ds), partition_size)
-        ]
-        print(f"Partitioned {len(train_ds)} total training samples")
+
+        if args.bagging:
+            train_dataloaders = [
+                utils.create_dataloader(
+                    [
+                        train_ds[int(random.random() * len(train_ds))]
+                        for _ in range(len(train_ds))
+                    ],
+                    tokenizer,
+                    args.batch_size,
+                    args.dataset,
+                    distillation=args.distillation_dataset is not None,
+                )
+                for _ in range(args.num_models)
+            ]
+            print(f"Created {args.num_models} datasets by sampling with replacement")
+        else:
+            partition_size = len(train_ds) // args.num_models
+            train_dataloaders = [
+                utils.create_dataloader(
+                    train_ds[i : i + partition_size],
+                    tokenizer,
+                    args.batch_size,
+                    args.dataset,
+                    distillation=args.distillation_dataset is not None,
+                )
+                for i in range(0, len(train_ds), partition_size)
+            ]
+            print(f"Partitioned {len(train_ds)} total training samples")
         val_dataloader = utils.create_dataloader(
             ds["validation"], tokenizer, args.val_batch_size, args.dataset
         )
+
     # Build models (and check param counts).
     models, configs = utils.build_models(
         num_models=args.num_models,
