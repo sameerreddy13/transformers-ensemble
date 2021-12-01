@@ -8,7 +8,9 @@ class Ensemble():
         self.models = models
         self.device = device
 
-    def fit(self, dataloader):
+    def fit(self, dataloader, num_epochs=None):
+        if num_epochs is not None:
+            print("WARNING: num_epochs argument is not used")
         pass
 
     def predict_batch(self, example):
@@ -28,13 +30,10 @@ class AverageVote(Ensemble):
         super().__init__(models, device)
 
     @staticmethod
-    def average_vote(models, input_ids, attention_mask, labels, num_epochs=None,):
+    def average_vote(models, input_ids, attention_mask, labels):
         '''
         Return ensemble predictions and accuracy
         '''
-        if num_epochs is not None:
-            print("WARNING: num_epochs argument is not used")
-
         all_preds = []
         for model in models:
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
@@ -42,7 +41,7 @@ class AverageVote(Ensemble):
             all_preds.append(preds)
 
         preds = torch.stack(all_preds).mode(dim=0).values
-        return preds, (preds == labels).float().mean()
+        return preds, (preds == labels).float().mean().item()
 
     def predict_batch(self, example):
         '''
