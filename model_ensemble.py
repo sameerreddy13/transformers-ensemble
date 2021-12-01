@@ -28,7 +28,7 @@ class AverageVote(Ensemble):
         super().__init__(models, device)
 
     @staticmethod
-    def average_vote(models, num_epochs=None, input_ids, attention_mask, labels):
+    def average_vote(models, input_ids, attention_mask, labels, num_epochs=None,):
         '''
         Return ensemble predictions and accuracy
         '''
