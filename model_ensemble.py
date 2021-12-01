@@ -1,5 +1,7 @@
 import torch
 import torch.nn.functional as F
+
+
 class Ensemble():
     def __init__(self, models, device):
         models = [model.to(device) for model in models] # TODO: split up across gpus    
@@ -16,9 +18,7 @@ class Ensemble():
         '''
         Return predictions and accuracy for all batches in dataloader
         '''
-        results = [self.predict_batch(example) for example in dataloader]
-        preds, accs = list(zip(*results))
-        return torch.cat(preds), torch.tensor(accs)
+        return [self.predict_batch(example)[1] for example in dataloader]
 
 class AverageVote(Ensemble):
     '''
@@ -27,12 +27,13 @@ class AverageVote(Ensemble):
     def __init__(self, models, device):
         super().__init__(models, device)
 
-    def average_vote(self, input_ids, attention_mask, labels):
+    @staticmethod
+    def average_vote(models, input_ids, attention_mask, labels):
         '''
         Return ensemble predictions and accuracy
         '''
         all_preds = []
-        for model in self.models:
+        for model in models:
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
             preds = outputs.logits.argmax(axis=-1)
             all_preds.append(preds)
@@ -45,7 +46,7 @@ class AverageVote(Ensemble):
         Return predictions and accuracy on batch
         '''
         example = [x.to(self.device) for x in example]
-        return self.average_vote(*example)
+        return self.average_vote(self.models, *example)
 
 
 class WeightedVote(Ensemble):
@@ -54,30 +55,40 @@ class WeightedVote(Ensemble):
     '''
     def __init__(self, models, device):
         super().__init__(models, device)
-        self.w = torch.nn.Parameter(
-            torch.full(len(self))
-            torch.ones(len(self.models), 1, device=device) / len(self.models)
-        )
+        self.w = torch.nn.Parameter(torch.full(
+            size=(1, len(self.models), 1), fill_value=1 / len(self.models),
+            device=device
+        ))
 
-    def fit(self, dataloader, lr=1e-1):
-        # optimizer = torch.optim.AdamW(lr=)
+    def fit(self, dataloader, lr=1.0, print_freq=25):
         optimizer = torch.optim.SGD([self.w], lr=lr)
-        for example in dataloader:
+        accs = []
+        for i, example in enumerate(dataloader):
             example = [x.to(self.device) for x in example]
-            logits = torch.stack([
-                model(input_ids=example[0], attention_mask=example[1]).logits
-                for model in self.models
-            ]).permute(1, 0, 2)
-            import pdb; pdb.set_trace() 
-            probs = self.w.dot(logits).softmax(-1)
-            labels = example[2]
-            loss = F.cross_entropy(input=probs, target=labels)
+            probs, acc = self.predict_batch(example)
+            loss = F.cross_entropy(input=probs, target=example[2])
+            accs.append(acc)
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
+            if i % print_freq == 0:
+                acc, accs = sum(accs) / len(accs), []
+                _, voting_acc = AverageVote.average_vote(self.models, *example)
+                print(f"[{i}/{len(dataloader)}] Average accuracy so far: {acc} (baseline voting "
+                      f"accuracy: {voting_acc}, loss = {loss.item()})")
 
+        print(f"Done. Final weights: {self.w.data.squeeze()}")
 
+    def predict_batch(self, example):
+        example = [x.to(self.device) for x in example]
+        logits = torch.stack([  # Shape: (batch_size, num_models, num_labels)
+            model(input_ids=example[0], attention_mask=example[1]).logits
+            for model in self.models
+        ]).permute(1, 0, 2)
 
-        
+        probs = (logits * self.w).sum(dim=1).softmax(dim=-1)  # Sum over num_models dim
+        acc = (probs.argmax(dim=-1) == example[2]).float().mean().item()
+
+        return probs, acc

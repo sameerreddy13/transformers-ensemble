@@ -1,10 +1,15 @@
-import torch
 import argparse
+import tqdm
 from pathlib import Path
-import transformers
-import utils
+
 import datasets
+import transformers
+import torch
+
+import utils
 import model_ensemble
+
+
 def parse_args():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exp-dir", help="Path to set of models for one experiment", required=True)
@@ -79,10 +84,11 @@ def main(args):
     ensemble.fit(train_dataloader)
 
     # Eval ensemble
-    _, val_accs = ensemble.predict(val_dataloader)
-    _, train_accs = ensemble.predict(train_dataloader)
+    print("Computing train and validation accuracies")
+    train_accs = ensemble.predict(tqdm.tqdm(train_dataloader))
+    val_accs = ensemble.predict(tqdm.tqdm(val_dataloader))
 
-    get_acc = lambda x: round((sum(x) / len(x)).item(), 4)
+    get_acc = lambda x: round((sum(x) / len(x)), 4)
     print("Ensemble voting train accuracy:", get_acc(train_accs))
     print("Ensemble voting val accuracy:", get_acc(val_accs))
 
