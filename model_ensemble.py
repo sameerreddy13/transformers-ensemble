@@ -28,10 +28,13 @@ class AverageVote(Ensemble):
         super().__init__(models, device)
 
     @staticmethod
-    def average_vote(models, input_ids, attention_mask, labels):
+    def average_vote(models, num_epochs=None, input_ids, attention_mask, labels):
         '''
         Return ensemble predictions and accuracy
         '''
+        if num_epochs is not None:
+            print("WARNING: num_epochs argument is not used")
+
         all_preds = []
         for model in models:
             outputs = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
