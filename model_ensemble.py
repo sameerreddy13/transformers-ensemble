@@ -60,24 +60,25 @@ class WeightedVote(Ensemble):
             device=device
         ))
 
-    def fit(self, dataloader, lr=1.0, print_freq=25):
+    def fit(self, dataloader, num_epochs=1, lr=1.0, print_freq=25):
         optimizer = torch.optim.SGD([self.w], lr=lr)
         accs = []
-        for i, example in enumerate(dataloader):
-            example = [x.to(self.device) for x in example]
-            probs, acc = self.predict_batch(example)
-            loss = F.cross_entropy(input=probs, target=example[2])
-            accs.append(acc)
+        for epoch in range(num_epochs):
+            for i, example in enumerate(dataloader):
+                example = [x.to(self.device) for x in example]
+                probs, acc = self.predict_batch(example)
+                loss = F.cross_entropy(input=probs, target=example[2])
+                accs.append(acc)
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-            if i % print_freq == 0:
-                acc, accs = sum(accs) / len(accs), []
-                _, voting_acc = AverageVote.average_vote(self.models, *example)
-                print(f"[{i}/{len(dataloader)}] Average accuracy so far: {acc} (baseline voting "
-                      f"accuracy: {voting_acc}, loss = {loss.item()})")
+                if i % print_freq == 0:
+                    acc, accs = sum(accs) / len(accs), []
+                    _, voting_acc = AverageVote.average_vote(self.models, *example)
+                    print(f"[Epoch {epoch}] [{i}/{len(dataloader)}] Average accuracy so far: "
+                          f"{acc} (baseline voting accuracy: {voting_acc}, loss = {loss.item()})")
 
         print(f"Done. Final weights: {self.w.data.squeeze()}")
 

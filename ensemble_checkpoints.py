@@ -15,6 +15,7 @@ def parse_args():
     ap.add_argument("--exp-dir", help="Path to set of models for one experiment", required=True)
     ap.add_argument("--dataset", type=str, default="sst2")
     ap.add_argument("--val-batch-size", type=int, default=128)
+    ap.add_argument("--num-epochs", type=int, default=1)
     ap.add_argument("--batch-size", type=int, default=128)
     ap.add_argument("--device", type=str, default="cuda")
     ap.add_argument("--limit", type=int, default=-1)
@@ -81,7 +82,7 @@ def main(args):
         ensemble = model_ensemble.WeightedVote(models, device)
     else:
         raise ValueError("No ensemble strategy provided")
-    ensemble.fit(train_dataloader)
+    ensemble.fit(train_dataloader, num_epochs=args.num_epochs)
 
     # Eval ensemble
     print("Computing train and validation accuracies")
