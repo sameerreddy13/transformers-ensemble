@@ -8,19 +8,31 @@ Requires Miniconda 3.9.5
 
 ```
 - git clone repo
-- wget miniconda
 - install miniconda3
 - install conda env using environment.yml
 ```
 
 ```
-pip install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-pip install transformers datasets
-pip install numpy requests nlpaug tqdm sentencepiece
+If using GPU:
+	- pip install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
 ```
 
 
-## Training
+## Script for training ensemble models
 ```
-python3 ~/repo_team1/ensemble_basic.py
+python ensemble_basic.py. Use `-h` to see help for running the script.
 ```
+
+## Script for combining trained ensemble models, with a voting method
+```
+python ensemble_checkpoints.py
+```
+
+## Instructions for running examples
+### First train subnetworks
+- `examples/train_8_subnetworks.sh` to start training
+- Provide any number of integers as GPU numbers to use e.g. `bash examples/train_8_subnetworks.sh 1 3 7` to train in parallel on GPUs 1, 3, 7  
+
+### Second ensemble subnetworks with voting
+- `examples/ensemble_subnetworks.sh` to train ensemble method and evaluate
+- Run `bash examples/ensemble_subnetworks.sh [device]` where device is one of 'cpu' 'cuda' or 'cuda:n' 
