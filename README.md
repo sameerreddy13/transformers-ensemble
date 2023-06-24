@@ -2,7 +2,7 @@
 Class Project for CS-8803-SMR
 Glenn Matlin (GT ID: X) , Piyush Patil (GT ID: Y), Sameer Reddy (GT ID: Z)
 
-Requires Miniconda 3.9.5
+[Presentation](https://gtvault-my.sharepoint.com/:p:/g/personal/gmatlin3_gatech_edu/EaTUNYc6_dpJsZeyEE1q6wwBSzWMubU_9OyjctwuiNVadA?e=AHFhQv)
 
 ## Setup
 
